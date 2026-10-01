@@ -2,76 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  BASEMAPS,
-  CATALOGO_LEGADO,
   CATALOGO_VAZIO,
-  DEFAULT_VIEW,
   atribuicaoHtml,
   basemaps,
   camadaAtivavel,
   grupos,
   parseCatalogo,
-  findBasemap,
   legendItems,
-  opacityFromPercent,
-  percentFromOpacity,
   withBase,
 } from "../../worker/web/js/layers.js";
-
-test("padrão: mapa de ruas, polígono visível, preenchimento 35% (mesmo alfa 90/255 do mapa.pdf)", () => {
-  assert.deepEqual(DEFAULT_VIEW, { base: "ruas", polygon: true, opacity: 0.35 });
-  assert.ok(Object.isFrozen(DEFAULT_VIEW));
-  assert.equal(findBasemap(DEFAULT_VIEW.base).enabled, true);
-});
-
-test("camadas: ruas (OSM), sem mapa-base e satélite desabilitado sem URL", () => {
-  assert.deepEqual(BASEMAPS.map((b) => b.id), ["ruas", "nenhum", "satelite"]);
-  const ruas = findBasemap("ruas");
-  assert.equal(ruas.label, "Mapa de ruas (OpenStreetMap)");
-  assert.equal(ruas.url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
-  assert.match(ruas.attribution, /openstreetmap\.org\/copyright/);
-  assert.equal(findBasemap("nenhum").url, null);
-  const satelite = findBasemap("satelite");
-  assert.equal(satelite.label, "Satélite — em breve");
-  assert.equal(satelite.enabled, false);
-  assert.equal(satelite.url, null); // nenhuma requisição possível
-});
-
-test("withBase troca só para camada habilitada e conhecida", () => {
-  assert.deepEqual(withBase(DEFAULT_VIEW, "nenhum"), { ...DEFAULT_VIEW, base: "nenhum" });
-  assert.equal(withBase(DEFAULT_VIEW, "satelite"), DEFAULT_VIEW);
-  assert.equal(withBase(DEFAULT_VIEW, "inexistente"), DEFAULT_VIEW);
-  assert.equal(withBase(DEFAULT_VIEW, "__proto__"), DEFAULT_VIEW);
-  assert.equal(findBasemap("constructor"), null);
-});
-
-test("transparência: percentual do controle vira opacidade entre 0 e 1", () => {
-  assert.equal(opacityFromPercent("0"), 0);
-  assert.equal(opacityFromPercent("18"), 0.18);
-  assert.equal(opacityFromPercent(100), 1);
-  assert.equal(opacityFromPercent(150), 1);
-  assert.equal(opacityFromPercent(-5), 0);
-  assert.equal(opacityFromPercent("abc"), DEFAULT_VIEW.opacity);
-  assert.equal(percentFromOpacity(0.18), 18);
-  assert.equal(percentFromOpacity(0.5), 50);
-});
-
-test("legenda: mapa-base ativo com fonte e polígono visível", () => {
-  assert.deepEqual(legendItems(DEFAULT_VIEW), [
-    { kind: "base", text: "Mapa-base: Mapa de ruas (OpenStreetMap)" },
-    { kind: "poligono", text: "Polígono do imóvel (preenchimento 35%)" },
-  ]);
-});
-
-test("legenda: sem mapa-base, polígono oculto e falha dos tiles", () => {
-  assert.deepEqual(legendItems({ ...DEFAULT_VIEW, base: "nenhum", polygon: false }), [
-    { kind: "base", text: "Mapa-base: nenhum" },
-  ]);
-  assert.deepEqual(legendItems(DEFAULT_VIEW, { tilesFailed: true })[0], {
-    kind: "base",
-    text: "Mapa-base: Mapa de ruas (OpenStreetMap) — indisponível",
-  });
-});
 
 // ---- Catálogo servido pela API (GET /camadas) -----------------------------------------
 
@@ -212,14 +151,28 @@ test("withBase com catálogo: só mapa-base ativável", () => {
   assert.equal(withBase(vazio, "ruas_osm", CATALOGO_VAZIO), vazio);
 });
 
-test("CATALOGO_LEGADO (até a interface buscar /camadas): ruas, nenhum e satélite desabilitado", () => {
-  assert.deepEqual(ids(basemaps(CATALOGO_LEGADO)), ["ruas", "nenhum", "satelite"]);
-  const ruas = CATALOGO_LEGADO.camadas.find((c) => c.id === "ruas");
-  assert.equal(camadaAtivavel(ruas), true);
-  assert.equal(ruas.url, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
-  assert.equal(camadaAtivavel(CATALOGO_LEGADO.camadas.find((c) => c.id === "satelite")), false);
-  assert.match(atribuicaoHtml(ruas.fonte.atribuicao), /href="https:\/\/www\.openstreetmap\.org\/copyright"/);
-  // Passa pelas mesmas conferências do catálogo da API.
-  assert.equal(parseCatalogo({ camadas: CATALOGO_LEGADO.camadas, estilos: [], alfa_padrao: 0.35 }).camadas.length, 4);
-  assert.ok(Object.isFrozen(CATALOGO_LEGADO) && Object.isFrozen(CATALOGO_LEGADO.camadas));
+// ---- Só o catálogo real: sem compatibilidade com a lista fixa antiga -------------------
+
+test("layers.js não exporta mais a lista fixa antiga nem os helpers de transparência", async () => {
+  const modulo = await import("../../worker/web/js/layers.js");
+  for (const nome of ["BASEMAPS", "CATALOGO_LEGADO", "DEFAULT_VIEW", "findBasemap", "opacityFromPercent", "percentFromOpacity"]) {
+    assert.equal(nome in modulo, false, nome);
+  }
+});
+
+test("withBase sem catálogo não troca o mapa-base", () => {
+  const view = { base: "nenhum", polygon: true };
+  for (const catalogo of [undefined, null, {}]) {
+    assert.equal(withBase(view, "ruas_osm", catalogo), view);
+    assert.equal(withBase(view, "ruas", catalogo), view); // id da lista antiga
+  }
+});
+
+test("legendItems sem catálogo: nenhum mapa-base, só o polígono", () => {
+  for (const catalogo of [undefined, null, {}]) {
+    assert.deepEqual(legendItems({ base: "ruas", polygon: true }, catalogo, { tilesFailed: true }), [
+      { kind: "base", text: "Mapa-base: nenhum" },
+      { kind: "poligono", text: "Polígono do imóvel" },
+    ]);
+  }
 });

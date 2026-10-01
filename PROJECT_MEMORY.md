@@ -14,6 +14,7 @@
 - 2026-10-01 — O `mapa.pdf` não contém camada raster nem acessa a rede; OSM é só pré-visualização. Verificado gerando PDFs em container `--network none`.
 - 2026-10-01 — Alfa do preenchimento: `alfa8 = floor(alfa × 255 + 0,5)` (metade para cima) no Python e no JavaScript. O `round()` do Python foi rejeitado porque arredonda ao par e faria tela e PDF divergirem em 30 % e 70 %. Alfa inválido é recusado, nunca corrigido.
 - 2026-10-01 — Jobs antigos sem `estilo`/`alfa_preenchimento` valem `padrao`/0.35, sem migração de banco.
+- 2026-10-01 — O frontend não tem mais lista local de mapas-base nem fallback de catálogo: sem catálogo válido, `withBase` não troca o mapa-base e a legenda mostra "Mapa-base: nenhum". O polígono muda só por `mapView.setStyle` (prancha completa). Não reintroduzir lista fixa no navegador.
 
 ## Fatos verificados no repositório
 
@@ -33,7 +34,6 @@ A memória compartilhada foi consultada antes da documentação. Ela contém not
 - Existem referências históricas a jobs que ficaram presos em `started` durante uma falha anterior; investigar antes de criar rotina de recuperação.
 - Ainda faltam validação com clientes, arquivos reais maiores, concorrência e definição de requisitos profissionais do memorial.
 - KML, Shapefile, clientes, imóveis, multi-tenancy de produção e billing não devem ser tratados como implementados.
-- Compatibilidade temporária no navegador: `BASEMAPS`, `CATALOGO_LEGADO`, `findBasemap`, `opacityFromPercent`, `percentFromOpacity` (`layers.js`) e `setColors`/`setOpacity` (`map.js`) não têm uso em produção, só em testes unitários antigos. Remover junto com os ramos sem catálogo de `withBase`/`legendItems` e os testes legados, com todas as suítes verdes.
 
 ## Registro de decisões futuras
 

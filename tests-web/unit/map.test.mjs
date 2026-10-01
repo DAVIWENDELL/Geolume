@@ -2,13 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createMapView } from "../../worker/web/js/map.js";
 import { readFileSync } from "node:fs";
-import { CATALOGO_LEGADO, CATALOGO_VAZIO, DEFAULT_VIEW, atribuicaoHtml, parseCatalogo } from "../../worker/web/js/layers.js";
+import { CATALOGO_VAZIO, atribuicaoHtml, parseCatalogo } from "../../worker/web/js/layers.js";
 import { polygonStyle } from "../../worker/web/js/prancha.js";
 
 const alfa8de = (alfa) => Math.floor(alfa * 255 + 0.5);
 const GEOMETRY = { type: "Polygon", coordinates: [[[-47.9, -15.8], [-47.9, -15.79], [-47.89, -15.79], [-47.9, -15.8]]] };
 const BOUNDS = [[-15.8, -47.9], [-15.79, -47.89]];
 const OUTRO = [[-10, -40], [-9, -39]];
+const CORPO = JSON.parse(readFileSync(new URL("../../worker/tests/fixtures/catalogo_publico.json", import.meta.url), "utf-8"));
+const catalogo = () => parseCatalogo(structuredClone(CORPO));
+const OSM = CORPO.camadas.find((c) => c.id === "ruas_osm");
+// Padrão com o catálogo real: OSM, polígono visível, alfa 0.35 da prancha.
+const VIEW_PADRAO = { base: "ruas_osm", polygon: true, opacity: 0.35 };
 
 /** Leaflet falso: registra o que o mapa pede, sem DOM. */
 function fakeLeaflet() {
@@ -53,8 +58,7 @@ function setup(opcoes = {}) {
   const { L, log } = fakeLeaflet();
   const container = { hidden: true };
   const changes = [];
-  // Os testes antigos (ids ruas/nenhum/satelite) usam o CATALOGO_LEGADO; os novos passam o catálogo real.
-  const view = createMapView(container, { leaflet: L, onChange: (s) => changes.push(s), catalogo: CATALOGO_LEGADO, ...opcoes });
+  const view = createMapView(container, { leaflet: L, onChange: (s) => changes.push(s), catalogo: catalogo(), ...opcoes });
   const tilesOn = () => log.tiles.filter((t) => t.onMap);
   const shape = () => log.shapes.at(-1);
   return { L, log, container, changes, view, tilesOn, shape };
@@ -63,7 +67,7 @@ function setup(opcoes = {}) {
 test("sem geometria não cria mapa nem pede tiles", () => {
   const { log, view } = setup();
   view.setBase("nenhum");
-  view.setOpacity(0.5);
+  view.setStyle({ alfa_preenchimento: 0.5 });
   assert.equal(log.maps.length, 0);
   assert.equal(log.tiles.length, 0);
   assert.equal(view.state.visible, false);
@@ -84,7 +88,7 @@ test("primeira geometria: mapa de ruas padrão, polígono com contorno e enquadr
   assert.equal(shape().options.style.color, "#C80000"); // mesmas cores padrão do mapa.pdf
   assert.equal(shape().options.style.fillColor, "#FFC800");
   assert.deepEqual(log.maps[0].fits.at(-1).bounds, BOUNDS);
-  assert.deepEqual(view.state, { visible: true, view: DEFAULT_VIEW, tilesFailed: false });
+  assert.deepEqual(view.state, { visible: true, view: VIEW_PADRAO, tilesFailed: false });
 });
 
 test("sem mapa-base remove os tiles e o polígono continua", () => {
@@ -94,7 +98,7 @@ test("sem mapa-base remove os tiles e o polígono continua", () => {
   assert.equal(tilesOn().length, 0);
   assert.equal(shape().onMap, true);
   assert.equal(view.state.view.base, "nenhum");
-  view.setBase("ruas");
+  view.setBase("ruas_osm");
   assert.equal(tilesOn().length, 1); // uma camada por vez
 });
 
@@ -105,7 +109,7 @@ test("satélite desabilitado não troca a camada nem cria tiles", () => {
   assert.equal(view.setBase("satelite"), false);
   assert.equal(log.tiles.length, antes);
   assert.equal(tilesOn().length, 1);
-  assert.equal(view.state.view.base, "ruas");
+  assert.equal(view.state.view.base, "ruas_osm");
 });
 
 test("ocultar e mostrar o polígono", () => {
@@ -118,13 +122,13 @@ test("ocultar e mostrar o polígono", () => {
   assert.equal(shape().onMap, true);
 });
 
-test("transparência muda só o preenchimento; o contorno fica", () => {
+test("alfa da prancha muda só o preenchimento; o contorno fica", () => {
   const { view, shape } = setup();
   view.show(GEOMETRY, BOUNDS);
-  view.setOpacity(0);
+  view.setStyle({ alfa_preenchimento: 0 });
   assert.equal(shape().styles.at(-1).fillOpacity, 0);
   assert.equal(shape().styles.at(-1).opacity, 1);
-  view.setOpacity(2);
+  view.setStyle({ alfa_preenchimento: 1 });
   assert.equal(shape().styles.at(-1).fillOpacity, 1);
   assert.equal(view.state.view.opacity, 1);
 });
@@ -133,7 +137,7 @@ test("escolhas valem para a próxima geometria (troca de job)", () => {
   const { view, shape } = setup();
   view.show(GEOMETRY, BOUNDS);
   view.setPolygonVisible(false);
-  view.setOpacity(0.5);
+  view.setStyle({ alfa_preenchimento: 0.5 });
   view.show(GEOMETRY, OUTRO);
   assert.equal(shape().onMap, false);
   assert.equal(shape().options.style.fillOpacity, alfa8de(0.5) / 255);
@@ -169,7 +173,7 @@ test("erro de tiles de uma camada antiga não marca a atual", () => {
   view.show(GEOMETRY, BOUNDS);
   const antiga = log.tiles[0];
   view.setBase("nenhum");
-  view.setBase("ruas");
+  view.setBase("ruas_osm");
   antiga.fire("tileerror");
   assert.equal(view.state.tilesFailed, false);
 });
@@ -179,14 +183,14 @@ test("clear esconde o mapa; reset volta ao padrão e descarta o mapa", () => {
   view.show(GEOMETRY, BOUNDS);
   view.setBase("nenhum");
   view.setPolygonVisible(false);
-  view.setOpacity(0.7);
+  view.setStyle({ alfa_preenchimento: 0.7 });
   view.clear();
   assert.equal(container.hidden, true);
   assert.equal(view.state.visible, false);
   assert.equal(changes.at(-1).visible, false);
   view.reset();
   assert.equal(log.maps[0].removed, true);
-  assert.deepEqual(view.state, { visible: false, view: DEFAULT_VIEW, tilesFailed: false });
+  assert.deepEqual(view.state, { visible: false, view: VIEW_PADRAO, tilesFailed: false });
   view.show(GEOMETRY, BOUNDS);
   assert.equal(log.maps.length, 2);
   assert.equal(log.tiles.filter((t) => t.onMap).length, 1);
@@ -239,40 +243,14 @@ test("exceção ao criar a camada de tiles vira aviso de falha, sem quebrar", ()
   view.show(GEOMETRY, BOUNDS);
   L.tileLayer = () => { throw new Error("tileLayer"); };
   view.setBase("nenhum");
-  assert.doesNotThrow(() => view.setBase("ruas"));
-  assert.equal(view.state.view.base, "ruas");
+  assert.doesNotThrow(() => view.setBase("ruas_osm"));
+  assert.equal(view.state.view.base, "ruas_osm");
   assert.equal(view.state.tilesFailed, true);
   assert.equal(shape().onMap, true);
 });
 
-test("setColors pinta o polígono atual e os próximos; reset volta às cores padrão", () => {
-  const { view, shape } = setup();
-  view.setColors({ contorno: "#112233", preenchimento: "#445566" });
-  view.show(GEOMETRY, BOUNDS);
-  assert.equal(shape().options.style.color, "#112233");
-  assert.equal(shape().options.style.fillColor, "#445566");
-  view.setColors({ contorno: "#000000", preenchimento: "#FFFFFF" });
-  assert.equal(shape().styles.at(-1).color, "#000000");
-  assert.equal(shape().styles.at(-1).fillColor, "#FFFFFF");
-  view.reset();
-  view.show(GEOMETRY, BOUNDS);
-  assert.equal(shape().options.style.color, "#C80000");
-  assert.equal(shape().options.style.fillColor, "#FFC800");
-});
-
-test("setColors ignora cor fora de #RRGGBB", () => {
-  const { view, shape } = setup();
-  view.setColors({ contorno: "red;x", preenchimento: "url(javascript:1)" });
-  view.show(GEOMETRY, BOUNDS);
-  assert.equal(shape().options.style.color, "#C80000");
-  assert.equal(shape().options.style.fillColor, "#FFC800");
-});
-
 // ---- Task 6: catálogo, panes e estilo único ------------------------------------------
 
-const CORPO = JSON.parse(readFileSync(new URL("../../worker/tests/fixtures/catalogo_publico.json", import.meta.url), "utf-8"));
-const catalogo = () => parseCatalogo(structuredClone(CORPO));
-const OSM = CORPO.camadas.find((c) => c.id === "ruas_osm");
 const semClasse = (estilo) => ({ ...estilo, className: undefined });
 
 test("pane do polígono acima do mapa-base (z-index pela ordem do catálogo)", () => {
@@ -488,4 +466,11 @@ test("sem a opção catalogo o mapa começa sem catálogo: nenhum tile até setC
   view.show(GEOMETRY, BOUNDS);
   assert.equal(log.tiles.length, 0);
   assert.equal(view.state.view.base, "nenhum");
+});
+
+test("mapView muda o polígono só por setStyle (sem setColors nem setOpacity)", () => {
+  const { view } = setup({ catalogo: catalogo() });
+  assert.equal(typeof view.setStyle, "function");
+  assert.equal("setColors" in view, false);
+  assert.equal("setOpacity" in view, false);
 });

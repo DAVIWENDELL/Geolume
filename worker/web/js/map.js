@@ -13,7 +13,6 @@ const Z_BASE = 200;
 const Z_POLIGONO = 400;
 const CLASSE = "geolume-poligono";
 
-const clamp01 = (value) => Math.min(1, Math.max(0, Number(value) || 0));
 const catalogoOuVazio = (catalogo) => (Array.isArray(catalogo?.camadas) ? catalogo : CATALOGO_VAZIO);
 const ordemDe = (camada) => (Number.isFinite(camada?.ordem) ? camada.ordem : 0);
 
@@ -103,14 +102,6 @@ export function createMapView(container, { leaflet, onChange = () => {}, catalog
     layer?.setStyle(estilo());
   }
 
-  function setPrancha(next) {
-    const alfa = validateAlfa(next?.alfa_preenchimento);
-    prancha = { ...next };
-    view = { ...view, opacity: alfa.ok ? alfa.value : PRANCHA_PADRAO.alfa_preenchimento };
-    applyStyle();
-    changed();
-  }
-
   return {
     get available() {
       return Boolean(lib());
@@ -176,18 +167,11 @@ export function createMapView(container, { leaflet, onChange = () => {}, catalog
     /** Prancha do job ({ estilo, cor_contorno, cor_preenchimento, alfa_preenchimento }); o que
      *  estiver fora da regra cai no padrão, e o contorno fica sempre opaco. */
     setStyle(next) {
-      setPrancha(next ?? {});
-    },
-
-    // Transitórios até a Task 7 passar a usar setStyle: mudam só uma parte da prancha.
-    setOpacity(opacity) {
-      setPrancha({ ...prancha, alfa_preenchimento: clamp01(opacity) });
-    },
-
-    /** Cores da prancha ({ contorno, preenchimento }); cor fora de #RRGGBB vira a padrão. */
-    setColors(next) {
-      prancha = { ...prancha, cor_contorno: next?.contorno, cor_preenchimento: next?.preenchimento };
+      const alfa = validateAlfa(next?.alfa_preenchimento);
+      prancha = { ...next };
+      view = { ...view, opacity: alfa.ok ? alfa.value : PRANCHA_PADRAO.alfa_preenchimento };
       applyStyle();
+      changed();
     },
 
     /** Enquadra a geometria atual (mesmo com o polígono oculto). */
