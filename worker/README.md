@@ -88,13 +88,23 @@ mapa; se o arquivo não existir mais, a tela avisa em vez de quebrar.
 
 Camadas do mapa (painel acima do mapa, só aparece quando há geometria):
 
-- Mapa-base: "Mapa de ruas (OpenStreetMap)" (padrão) ou "Sem mapa-base" (nenhum
-  tile é pedido). "Satélite — em breve" aparece desabilitado e não tem URL: fica
-  adiado até existir provedor com licença comercial confirmada (Esri, Google,
-  Sentinel/EOX e similares não são usados).
-- Polígono do imóvel: mostrar/ocultar; transparência do preenchimento de 0 a 100%
-  (padrão 35%, o mesmo alfa 90/255 do mapa.pdf). O contorno não muda com a
-  transparência (opacidade 1, espessura 3). As cores são as da prancha do job.
+- O catálogo vem só do servidor: `GET /camadas` (exige sessão, 401 sem ela; mesma
+  resposta para qualquer usuário; `Cache-Control: private, max-age=300`) devolve
+  `camadas`, `estilos` e `alfa_padrao` de `geolume_worker/camadas.py`. O navegador
+  não tem lista própria e só o pede depois do login.
+- Grupos: "Disponíveis" (Mapa de ruas OSM, Sem mapa-base, Polígono do imóvel),
+  "Dependem de fonte oficial" (Satélite, Hidrografia, Rodovias, Limites municipais)
+  e "Planejadas" (Curvas de nível, Edificações). As indisponíveis aparecem
+  desabilitadas, com o aviso do catálogo, e não têm URL. Satélite fica adiado até
+  existir provedor com licença comercial confirmada.
+- OSM só na pré-visualização: atribuição "© Contribuidores do OpenStreetMap" e aviso
+  "Somente na pré-visualização — não entra no PDF". O mapa.pdf não tem camada raster
+  nem faz acesso de rede (só o polígono, em camada vetorial de memória).
+- Se o catálogo falhar (500, rede, JSON inválido ou URL não `https:`), a tela avisa
+  "Camadas indisponíveis no momento…", fica sem mapa-base (nenhum tile é pedido) e o
+  polígono continua desenhado. 401 no catálogo volta ao login normalmente.
+- Polígono do imóvel: mostrar/ocultar; cores, espessura e opacidade vêm da prancha
+  (do formulário ou do job). O contorno tem sempre opacidade 1.
 - "Enquadrar polígono" volta o zoom para a geometria atual, mesmo com ela oculta.
 - Legenda com o mapa-base ativo e o polígono. Se os tiles falharem, a tela avisa
   "Mapa-base indisponível no momento; o polígono continua visível." — o polígono,
@@ -107,22 +117,36 @@ Personalização da prancha ("Personalizar prancha (opcional)", no Novo processa
 - Campos, todos opcionais: nome do projeto e responsável técnico (até 100
   caracteres, sem quebras de linha nem caracteres de controle), logo da empresa
   (PNG ou JPEG, até 2 MB), cor principal (contorno) e cor de preenchimento
-  (`#RRGGBB`) e layout da prancha ("Padrão", "Legenda lateral" ou "Legenda
-  inferior", escolhido em cartões com miniatura).
+  (`#RRGGBB`), layout da prancha ("Padrão", "Legenda lateral" ou "Legenda
+  inferior", escolhido em cartões com miniatura), estilo do polígono e opacidade do
+  preenchimento.
+- Estilos (cartões; escolher um preenche as cores, que podem ser trocadas depois e
+  mantêm a espessura do estilo): "Padrão" #C80000/#FFC800, 0,6 mm no PDF e 3 px na
+  tela; "Técnico" #1F2937/#9CA3AF, 0,35 mm/2 px; "Preto e branco" #000000/#FFFFFF,
+  0,5 mm/2 px.
+- "Opacidade do preenchimento (entra no PDF)": 0 a 100 %, padrão 35 %. Conversão
+  única `alfa8 = floor(alfa × 255 + 0,5)` (metade para cima): o QGIS usa `alfa8` e o
+  Leaflet `alfa8 / 255`, então tela e PDF coincidem (35 % ⇒ 89/255, 60 % ⇒ 153,
+  100 % ⇒ 255). Com 0 % o preenchimento some e o contorno continua visível.
 - No mapa.pdf: título "{projeto} — Mapa de Localização" (sem projeto, o título
   atual), linha "Responsável técnico: …", logo no canto superior direito, cores do
   polígono e, nos layouts com legenda, a amostra "Limite do imóvel". Texto do
   usuário ou do GeoJSON sai literal no PDF (`[% 1+1 %]` não é avaliado pelo QGIS).
 - Sem nenhum campo preenchido o envio é igual ao de antes (só o GeoJSON), o job
   fica com `prancha` nula e o PDF sai como sempre. Jobs antigos e tarefas já
-  enfileiradas continuam funcionando.
+  enfileiradas continuam funcionando: `prancha` nula ou sem as chaves novas vale
+  `estilo="padrao"` e `alfa_preenchimento=0.35` (sem migração de banco).
 - A tela mostra acima do mapa o cabeçalho (título, responsável, logo) e pinta o
   polígono com as cores da prancha: do formulário enquanto há arquivo escolhido,
   do job quando um job está selecionado. Os campos valem para os próximos envios e
   voltam ao padrão em "Restaurar padrão" e no logout.
 - Servidor (a validação do navegador é só conveniência): `POST /jobs/async` aceita
-  os campos `projeto`, `responsavel`, `cor_contorno`, `cor_preenchimento`, `legenda`
-  e o arquivo `logo`; campo inválido responde 422 e nada é gravado. A logo é
+  os campos `projeto`, `responsavel`, `cor_contorno`, `cor_preenchimento`, `legenda`,
+  `estilo` (`padrao`, `tecnico`, `pb`), `alfa_preenchimento` (número de 0 a 1 com
+  ponto; `"0,5"`, `NaN` e fora da faixa são recusados, nunca corrigidos) e o arquivo
+  `logo`; campo inválido responde 422 e nada é gravado (ex.: "alfa_invalido:
+  Opacidade do preenchimento deve estar entre 0 e 1.", "estilo_invalido: Estilo do
+  polígono inválido."). A logo é
   validada pelo conteúdo (só PNG e JPEG; SVG, arquivo falso e imagem inválida são
   recusados; dimensões acima de 10 000 px ou 25 Mpx são recusadas antes de
   decodificar), gravada só normalizada (PNG, lado ≤ 1000 px) com nome derivado do

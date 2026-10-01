@@ -17,7 +17,7 @@
 - OSM só na pré-visualização, com atribuição "© Contribuidores do OpenStreetMap" e aviso "Somente na pré-visualização — não entra no PDF".
 - Geração do PDF sem nenhuma chamada de rede; nenhuma camada raster no projeto QGIS.
 - `alfa_preenchimento` ∈ [0, 1], padrão `0.35`; inválido é **recusado** (nunca corrigido) no navegador, na API e no worker, com código `alfa_invalido` e mensagem "Opacidade do preenchimento deve estar entre 0 e 1."
-- Alfa único: `alfa8 = round(alfa * 255)`; QGIS usa `alfa8`, Leaflet usa `alfa8 / 255`. Contorno sempre opacidade 1.
+- Alfa único: `alfa8 = floor(alfa * 255 + 0.5)` (metade para cima, como `Math.round`; não o `round()` do Python, que iria ao par); QGIS usa `alfa8`, Leaflet usa `alfa8 / 255`. Contorno sempre opacidade 1.
 - Estilos: `padrao` (#C80000 / #FFC800, 0,6 mm / 3 px), `tecnico` (#1F2937 / #9CA3AF, 0,35 mm / 2 px), `pb` (#000000 / #FFFFFF, 0,5 mm / 2 px). Id desconhecido ⇒ `estilo_invalido`, "Estilo do polígono inválido."
 - Jobs antigos (`prancha` nulo ou sem as chaves novas) ⇒ `estilo="padrao"`, `alfa_preenchimento=0.35`. Sem migração de banco.
 - Não alterar Dockerfile, docker-compose.yml, schema do banco nem o volume `geolume-postgis`. Manter QGIS, Celery, Redis e PostGIS.
@@ -54,7 +54,7 @@ Comandos (a partir de `D:\Projetos\Geolume`):
   - `ESTILO_PADRAO = "padrao"`, `ALFA_PADRAO = 0.35`.
   - `estilo_por_id(id: str) -> Estilo` (levanta `KeyError`).
   - `validar_alfa(valor) -> float` — `None`/`""` ⇒ `ALFA_PADRAO`; aceita `int`/`float` (não `bool`) e `str` com ponto decimal; recusa `NaN`, infinito, fora de [0, 1] com `InvalidInputError("alfa_invalido", ...)`.
-  - `alfa8(alfa: float) -> int` = `round(alfa * 255)`.
+  - `alfa8(alfa: float) -> int` = `floor(alfa * 255 + 0.5)`.
   - `catalogo_publico() -> dict` = `{"camadas": [...], "estilos": [...], "alfa_padrao": 0.35}`, só tipos JSON.
 
 - [ ] **Step 1: RED — testes do contrato**

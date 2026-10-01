@@ -12,6 +12,7 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 - [x] PostgreSQL para usuários, sessões e jobs.
 - [x] Upload, histórico, polling, downloads e mapa Leaflet local.
 - [x] Personalização opcional da prancha com cores, logo e três layouts.
+- [x] Catálogo de camadas servido por `GET /camadas`, estilos do polígono (Padrão, Técnico, Preto e branco) e opacidade do preenchimento iguais na pré-visualização e no `mapa.pdf` (verificação final em 2026-10-01: suítes completas verdes, PDFs reais inspecionados, geração em container sem rede).
 - [x] Testes unitários, worker, API e Playwright versionados.
 - [x] Proteções de autenticação, autorização, CSRF, limites e arquivos.
 

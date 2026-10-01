@@ -22,7 +22,9 @@
 - Mapa-base padrão: OpenStreetMap, com atribuição.
 - Opção sem mapa-base.
 - Satélite permanece desabilitado até existir provedor com licença adequada.
-- Polígono pode ser mostrado/ocultado e ter transparência ajustada.
+- Catálogo de camadas vem do servidor (`GET /camadas`), em três grupos: disponíveis, dependem de fonte oficial e planejadas; camadas indisponíveis ficam desabilitadas com aviso.
+- OSM aparece só na pré-visualização, com o aviso "Somente na pré-visualização — não entra no PDF"; se o catálogo falhar, a tela fica sem mapa-base e o polígono continua visível.
+- Polígono pode ser mostrado/ocultado; estilo (Padrão, Técnico, Preto e branco) e opacidade do preenchimento ficam na personalização da prancha, valem igual na tela e no PDF, e o contorno nunca fica transparente.
 - O botão de enquadrar deve continuar funcionando mesmo quando o polígono estiver oculto.
 - Falha de tiles não pode impedir upload, processamento ou downloads.
 

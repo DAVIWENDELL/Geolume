@@ -114,7 +114,8 @@ Também em `camadas.py`, com espessura em mm (PDF) e em px (Leaflet) na mesma de
     `opacityFromPercent`, que corrige silenciosamente, deixa de ser usado no envio.
   - API (`api.py`): campo de formulário `alfa_preenchimento`, validado por `validar_prancha`.
   - Worker (`prancha.py`): `validar_prancha` roda de novo antes de gerar o PDF.
-- Conversão única, `alfa8 = round(alfa * 255)`: o QGIS usa `alfa8` e o Leaflet usa
+- Conversão única, `alfa8 = floor(alfa * 255 + 0.5)` (metade para cima, igual ao `Math.round`
+  do navegador; o `round()` do Python iria ao par e daria 76 em vez de 77 para 30 %): o QGIS usa `alfa8` e o Leaflet usa
   `alfa8 / 255`, então tela e PDF têm exatamente o mesmo alfa. **Mudança conhecida:**
   o padrão passa de 90/255 (35,3 %) para 89/255 (34,9 %). Diferença visualmente
   imperceptível; os PDFs já gerados não mudam.
@@ -135,7 +136,7 @@ Também em `camadas.py`, com espessura em mm (PDF) e em px (Leaflet) na mesma de
    `estilo_por_id`, `catalogo_publico()` (dicionários prontos para JSON). Sem QGIS.
 2. **`prancha.py`**: `Prancha` ganha `estilo` e `alfa_preenchimento`; `validar_prancha`
    valida ambos.
-3. **`layout.py`**: `_simbolo(prancha)` usa cores, `round(alfa*255)` e a espessura do
+3. **`layout.py`**: `_simbolo(prancha)` usa cores, `alfa8(alfa)` e a espessura do
    estilo; a amostra da legenda usa o mesmo símbolo. Nenhuma camada de rede é adicionada
    ao projeto QGIS.
 4. **`api.py`**: `GET /camadas` (exige sessão; resposta constante, `Cache-Control:
