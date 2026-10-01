@@ -80,6 +80,8 @@ test("job com falha", async ({ page }) => {
   await submit(page, fixture("autointersecao.geojson"));
   await expect(page.getByTestId("detail-status")).toHaveText("Falhou", { timeout: 90_000 });
   await expect(page.getByTestId("detail-error")).not.toBeEmpty();
+  // Quem lê vê o motivo, não o código interno ("geometria_invalida: ...").
+  await expect(page.getByTestId("detail-error")).not.toHaveText(/^[a-z_]+:/);
 });
 
 test("selecionar job do historico", async ({ page }) => {
@@ -242,7 +244,41 @@ for (const [width, height] of [[1440, 900], [768, 1024], [375, 812]]) {
 
     const detail = await page.getByTestId("detail").boundingBox();
     const table = await page.getByTestId("jobs-table").boundingBox();
-    if (width >= 1024) expect(table.x).toBeGreaterThan(detail.x + detail.width);
-    else expect(table.y).toBeGreaterThan(detail.y);
+    // O redesign aprovado deixa o histórico compacto abaixo da área de trabalho
+    // também no desktop; ele não ocupa mais uma terceira coluna lateral.
+    expect(table.y).toBeGreaterThan(detail.y + detail.height - 1);
+  });
+}
+
+// ---- Varredura de UX: alvos de toque de 44 px no celular e no tablet ----------------------
+
+for (const [width, height] of [[768, 1024], [390, 844], [320, 640]]) {
+  test(`controles secundários com alvo de toque de 44 px ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await page.locator(`[data-testid="jobs-row"][data-task-id="${completedTaskId}"] td`).first().click();
+    await expect(page.getByTestId("detail-status")).toHaveText("Concluído");
+    await page.locator(".detalhes-tecnicos summary").click();
+    await page.getByTestId("upload-input").setInputFiles(fixture("gleba_rural_exemplo.geojson"));
+    await expect(page.getByTestId("map-tools")).toBeVisible();
+
+    const alvos = {
+      sair: page.getByTestId("logout"),
+      atualizar: page.getByTestId("jobs-refresh"),
+      outrasCamadas: page.getByTestId("camadas-mais").locator("summary"),
+      detalhesTecnicos: page.locator(".detalhes-tecnicos summary"),
+      copiar: page.locator("[data-copy]").first(),
+    };
+    // Tablet: tabela com a coluna Documentos. Celular: o cartão inteiro abre o job, sem links no meio dele.
+    const linha = page.locator(`[data-testid="jobs-row"][data-task-id="${completedTaskId}"]`);
+    if (width >= 640) alvos.linkHistorico = linha.locator(".row-links a").first();
+    else {
+      alvos.cartaoHistorico = linha;
+      await expect(linha.locator(".row-links")).toBeHidden();
+    }
+    for (const [nome, alvo] of Object.entries(alvos)) {
+      const box = await alvo.boundingBox();
+      expect(box?.height, nome).toBeGreaterThanOrEqual(44);
+    }
   });
 }

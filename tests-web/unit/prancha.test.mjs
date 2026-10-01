@@ -16,6 +16,7 @@ import {
   validateAlfa,
   validateLogo,
   validatePrancha,
+  resumoEnvio,
 } from "../../worker/web/js/prancha.js";
 
 const campos = (extra = {}) => ({ ...PRANCHA_PADRAO, ...extra });
@@ -298,4 +299,42 @@ test("pranchaFields: estilo e alfa só quando diferem do padrão; alfa com ponto
 test("pranchaFields com estilo ou alfa inválido não manda nada", () => {
   assert.deepEqual(pranchaFields(campos({ estilo: "urbano" }), ESTILOS), []);
   assert.deepEqual(pranchaFields(campos({ alfa_preenchimento: "2" }), ESTILOS), []);
+});
+
+// ---- Resumo das escolhas antes de processar --------------------------------------------
+
+const ESTILOS_RESUMO = JSON.parse(readFileSync(new URL("../../worker/tests/fixtures/catalogo_publico.json", import.meta.url), "utf-8")).estilos;
+const mapaResumo = (itens) => Object.fromEntries(itens.map(({ rotulo, valor }) => [rotulo, valor]));
+
+test("resumoEnvio sem personalização: título padrão, estilo Padrão, 35% e layout Padrão", () => {
+  assert.deepEqual(resumoEnvio(PRANCHA_PADRAO, { estilos: ESTILOS_RESUMO }), [
+    { rotulo: "Título", valor: "GeoLume — Mapa de Localização" },
+    { rotulo: "Estilo", valor: "Padrão" },
+    { rotulo: "Opacidade", valor: "35%" },
+    { rotulo: "Layout", valor: "Padrão" },
+  ]);
+});
+
+test("resumoEnvio com projeto, responsável, logo, Técnico, 60% e legenda lateral", () => {
+  const values = { ...PRANCHA_PADRAO, projeto: "Fazenda Boa Vista", responsavel: "Ana Souza", estilo: "tecnico",
+    cor_contorno: "#1F2937", cor_preenchimento: "#9CA3AF", alfa_preenchimento: 0.6, legenda: "lateral" };
+  assert.deepEqual(mapaResumo(resumoEnvio(values, { estilos: ESTILOS_RESUMO, logo: true })), {
+    "Título": "Fazenda Boa Vista — Mapa de Localização",
+    "Responsável": "Ana Souza",
+    "Estilo": "Técnico",
+    "Opacidade": "60%",
+    "Layout": "Legenda lateral",
+    "Logo": "Incluída",
+  });
+});
+
+test("resumoEnvio avisa quando as cores diferem das do estilo", () => {
+  const values = { ...PRANCHA_PADRAO, estilo: "tecnico", cor_contorno: "#0055AA", cor_preenchimento: "#9CA3AF" };
+  assert.equal(mapaResumo(resumoEnvio(values, { estilos: ESTILOS_RESUMO })).Estilo, "Técnico, com cores personalizadas");
+});
+
+test("resumoEnvio sem catálogo: estilo Padrão; valor fora da regra não vira número inventado", () => {
+  const resumo = mapaResumo(resumoEnvio({ ...PRANCHA_PADRAO, estilo: "tecnico", alfa_preenchimento: "abc" }, {}));
+  assert.equal(resumo.Estilo, "Padrão");
+  assert.equal(resumo.Opacidade, "Inválida");
 });

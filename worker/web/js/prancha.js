@@ -168,3 +168,20 @@ export function polygonColors(prancha) {
     preenchimento: cor(prancha?.cor_preenchimento, PRANCHA_PADRAO.cor_preenchimento),
   };
 }
+
+/** Resumo das escolhas antes de processar: [{ rotulo, valor }], só texto.
+ *  values: os do formulário; estilos: os do catálogo (sem catálogo, só o Padrão); logo: se há logo escolhida. */
+export function resumoEnvio(values, { estilos = [], logo = false } = {}) {
+  const itens = [{ rotulo: "Título", valor: pranchaTitle(values.projeto) }];
+  const responsavel = String(values.responsavel ?? "").trim();
+  if (responsavel) itens.push({ rotulo: "Responsável", valor: responsavel });
+  const estilo = estiloDoCatalogo(values.estilo, estilos);
+  const mesmo = (a, b) => String(a ?? "").toUpperCase() === String(b ?? "").toUpperCase();
+  const cores = estilo && (!mesmo(values.cor_contorno, estilo.contorno) || !mesmo(values.cor_preenchimento, estilo.preenchimento));
+  itens.push({ rotulo: "Estilo", valor: estilo ? `${estilo.nome}${cores ? ", com cores personalizadas" : ""}` : "Padrão" });
+  const alfa = validateAlfa(values.alfa_preenchimento);
+  itens.push({ rotulo: "Opacidade", valor: alfa.ok ? `${Math.round(alfa.value * 100)}%` : "Inválida" });
+  itens.push({ rotulo: "Layout", valor: (LAYOUTS.find((l) => l.valor === values.legenda) ?? LAYOUTS[0]).nome });
+  if (logo) itens.push({ rotulo: "Logo", valor: "Incluída" });
+  return itens;
+}

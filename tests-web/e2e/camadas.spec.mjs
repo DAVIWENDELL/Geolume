@@ -135,7 +135,10 @@ test("satélite aparece desabilitado e não faz nenhuma requisição", async ({ 
   await stubTiles(page);
   const saidas = externas(page);
   await comGeometria(page);
+  // Satélite fica em "Outras camadas" (recolhido): abre para tentar o clique de verdade.
+  await page.getByTestId("camadas-mais").locator("summary").click();
   const satelite = page.locator('[data-camada-id="satelite"] input');
+  await expect(satelite).toBeVisible();
   await expect(satelite).toBeDisabled();
   await satelite.click({ force: true });
   await expect(satelite).not.toBeChecked();
@@ -329,6 +332,9 @@ for (const [width, height] of [[1440, 900], [390, 844], [320, 640]]) {
     await page.setViewportSize({ width, height });
     await comGeometria(page);
     await expect(page.getByTestId("map-tools")).toBeVisible();
+    // Abre "Outras camadas": os itens recolhidos também precisam caber e ter 44 px quando visíveis.
+    await page.getByTestId("camadas-mais").locator("summary").click();
+    await expect(page.locator('[data-camada-id="satelite"]')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     const alvos = page.getByTestId("map-tools").locator("label, button, input[type=range]");
@@ -468,4 +474,25 @@ test("catálogo com HTML nos textos vira texto; atribuição escapada no Leaflet
   await expect(page.locator(`[data-testid="estilo-card"][data-estilo="tecnico"]`)).toContainText(`<svg onload="window.__xss=4">`);
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
   expect(await page.locator("img[src=x], svg[onload]").count()).toBe(0);
+});
+
+// ---- Varredura de UX: a amostra da legenda é o polígono que está no mapa ----------------
+
+test("amostra do polígono na legenda acompanha o estilo escolhido", async ({ page }) => {
+  await stubTiles(page);
+  await comGeometria(page);
+  const amostra = () => page.evaluate(() => {
+    const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+    const path = document.querySelector("path.geolume-poligono");
+    const antes = getComputedStyle(document.querySelector('[data-testid="map-legend"] [data-kind="poligono"]'), "::before");
+    return { legenda: antes.borderTopColor, mapa: rgb(path.getAttribute("stroke")) };
+  });
+  let atual = await amostra();
+  expect(atual.legenda).toBe(atual.mapa);
+
+  await page.getByTestId("prancha-form").locator("summary").click();
+  await page.locator('[data-testid="estilo-card"][data-estilo="pb"] input').check();
+  await expect.poll(async () => (await amostra()).mapa).toBe("rgb(0, 0, 0)");
+  atual = await amostra();
+  expect(atual.legenda).toBe(atual.mapa);
 });

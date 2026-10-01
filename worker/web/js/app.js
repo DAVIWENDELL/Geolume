@@ -1,9 +1,9 @@
-// Estado e ligações da tela de operação.
+// Estado e ligações da tela principal (envio, pré-visualização, resultado e histórico).
 import { createApi } from "./api.js";
 import { parseGeoJsonPreview, parseMetrics } from "./geo.js";
 import { CATALOGO_VAZIO, parseCatalogo } from "./layers.js";
 import { createMapView } from "./map.js";
-import { isCurrent, isTerminal, normalizeStatus, summarize, validateUpload } from "./model.js";
+import { etapaArquivo, isCurrent, mensagemErro, motivoProcessar, isTerminal, normalizeStatus, summarize, validateUpload } from "./model.js";
 import { createPoller } from "./poller.js";
 import {
   LAYOUTS,
@@ -12,11 +12,14 @@ import {
   coresDoEstilo,
   pranchaFields,
   polygonStyle,
+  resumoEnvio,
   validateLogo,
   validatePrancha,
 } from "./prancha.js";
 import {
   markSelectedRow,
+  renderAmostraPoligono,
+  renderArquivo,
   renderCamadasPanel,
   renderDetail,
   renderEstiloCards,
@@ -27,6 +30,7 @@ import {
   renderMessage,
   renderPranchaHead,
   renderPreview,
+  renderResumo,
   renderSession,
   renderSummary,
   renderUploadFile,
@@ -78,6 +82,9 @@ const ui = {
   pranchaAlfaValor: $("prancha-alfa-valor"),
   pranchaEstilos: $("prancha-estilos"),
   camadas: $("camadas-painel"),
+  arquivo: document.querySelector("[data-arquivo]"),
+  resumo: $("envio-resumo"),
+  envioMotivo: $("envio-motivo"),
 };
 
 // Campos da prancha pelo nome que a API espera.
@@ -107,6 +114,7 @@ function showCatalogo(next, { erro = false } = {}) {
   renderEstiloCards(ui.pranchaEstilos, catalogo.estilos, estiloEscolhido() || PRANCHA_PADRAO.estilo);
   mapView.setCatalogo(catalogo);
   renderMapTools(ui.preview, mapView.state, catalogo);
+  showEnvio(); // os nomes dos estilos do resumo vêm do catálogo
 }
 
 const state = {
@@ -265,6 +273,7 @@ function showPrancha(prancha, visible = true) {
   mapView.setStyle(prancha);
   const estilo = polygonStyle(prancha, catalogo.estilos); // o mesmo que o mapa acabou de aplicar
   const colors = { contorno: estilo.color, preenchimento: estilo.fillColor };
+  renderAmostraPoligono(ui.preview, estilo);
   renderPranchaHead(ui.pranchaHead, visible ? { ...prancha, colors, opacity: estilo.fillOpacity } : null);
 }
 
@@ -275,8 +284,17 @@ function jobPrancha(prancha) {
   return { ...prancha, logo };
 }
 
+/** Etapas 2 e 4 do envio: situação do arquivo escolhido e resumo do que vai para o mapa.pdf. */
+function showEnvio() {
+  const file = state.file;
+  const preview = state.preview?.file === file ? state.preview.result : null;
+  renderArquivo(ui.arquivo, etapaArquivo({ file, check: validateUpload(file), preview }));
+  renderResumo(ui.resumo, resumoEnvio(pranchaValues(), { estilos: catalogo.estilos, logo: Boolean(state.logo?.url) }));
+}
+
 /** Arquivo selecionado tem prioridade; senão, o job selecionado; senão, o convite. */
 function showPreview() {
+  showEnvio();
   const file = state.file;
   if (file) {
     const readable = validateUpload(file).ok;
@@ -398,7 +416,9 @@ function pranchaCheck() {
 }
 
 function updateSubmit() {
-  ui.submit.disabled = state.sending || !validateUpload(state.file).ok || !pranchaCheck().ok;
+  const motivo = motivoProcessar({ sending: state.sending, arquivoOk: validateUpload(state.file).ok, pranchaOk: pranchaCheck().ok });
+  ui.submit.disabled = Boolean(motivo);
+  ui.envioMotivo.textContent = state.sending ? "" : motivo; // durante o envio o próprio botão diz "Enviando…"
 }
 
 function pranchaChanged() {
@@ -507,7 +527,7 @@ async function submit() {
     } else {
       setFile(state.file);
     }
-    uploadNotice(`${file.name} enviado. Acompanhe o andamento em Job selecionado.`, "ok");
+    uploadNotice(`${file.name} enviado. Acompanhe o andamento em Resultado.`, "ok");
     // Sem personalização o job fica com prancha nula, como no servidor.
     const enviada = fields.length || logo
       ? { ...prancha.values, logo: logo ? `/jobs/${encodeURIComponent(queued.task_id)}/logo` : null }
@@ -519,7 +539,7 @@ async function submit() {
     state.sending = false;
     setFile(state.file);
     // detail de validação vem como "codigo: mensagem."; o código não ajuda quem lê.
-    const motivo = err.message.replace(/^[a-z_]+: /, "").replace(/\.$/, "");
+    const motivo = mensagemErro(err.message).replace(/\.$/, "");
     uploadNotice(`Não foi possível enviar: ${motivo}.`, "error");
   } finally {
     ui.submit.textContent = "Processar";

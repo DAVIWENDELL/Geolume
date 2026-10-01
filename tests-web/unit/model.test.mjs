@@ -9,6 +9,9 @@ import {
   validateUpload,
   formatBytes,
   isCurrent,
+  etapaArquivo,
+  motivoProcessar,
+  mensagemErro,
 } from "../../worker/web/js/model.js";
 
 test("normalizeStatus mapeia estados da fila", () => {
@@ -100,4 +103,50 @@ test("isCurrent compara a selecao com a resposta", () => {
   assert.equal(isCurrent("a", "b"), false);
   assert.equal(isCurrent("a", "a"), true);
   assert.equal(isCurrent(null, "a"), false);
+});
+
+// ---- Tela do cliente: downloads e etapa do arquivo -------------------------------------
+
+test("fileLinks traz título e descrição de cada documento; memorial sempre preliminar", () => {
+  const links = fileLinks("t");
+  assert.deepEqual(links.map((l) => l.titulo), ["Mapa PDF", "Memorial descritivo preliminar", "Resultado JSON"]);
+  for (const l of links) assert.ok(l.descricao.length > 0, l.kind);
+  const memorial = links.find((l) => l.kind === "memorial");
+  assert.match(memorial.descricao, /preliminar/i);
+  assert.doesNotMatch(`${memorial.titulo} ${memorial.descricao}`, /definitiv|oficial|legal/i);
+});
+
+test("etapaArquivo: sem arquivo convida a escolher um GeoJSON", () => {
+  assert.deepEqual(etapaArquivo({ file: null }), { estado: "vazio", texto: "Escolha um arquivo GeoJSON para começar." });
+});
+
+test("etapaArquivo: arquivo recusado pelo navegador mostra o motivo", () => {
+  const file = { name: "x.json", size: 10 };
+  assert.deepEqual(etapaArquivo({ file, check: validateUpload(file) }), { estado: "invalido", texto: "Selecione um arquivo .geojson." });
+});
+
+test("etapaArquivo: lendo, válido e polígono com problema", () => {
+  const file = { name: "a.geojson", size: 10 };
+  const check = { ok: true };
+  assert.deepEqual(etapaArquivo({ file, check, preview: null }), { estado: "lendo", texto: "Conferindo o polígono…" });
+  assert.deepEqual(etapaArquivo({ file, check, preview: { ok: true } }), { estado: "valido", texto: "Polígono válido, pronto para processar." });
+  assert.deepEqual(etapaArquivo({ file, check, preview: { ok: false, message: "O polígono se cruza." } }), {
+    estado: "alerta",
+    texto: "O polígono se cruza. O processamento provavelmente falhará; você ainda pode enviar para confirmar.",
+  });
+});
+
+test("motivoProcessar explica por que o botão está desabilitado; vazio quando pode enviar", () => {
+  assert.equal(motivoProcessar({ sending: true, arquivoOk: true, pranchaOk: true }), "Enviando o arquivo…");
+  assert.equal(motivoProcessar({ sending: false, arquivoOk: false, pranchaOk: true }), "Escolha um arquivo GeoJSON válido para processar.");
+  assert.equal(motivoProcessar({ sending: false, arquivoOk: true, pranchaOk: false }), "Corrija a personalização da prancha para processar.");
+  assert.equal(motivoProcessar({ sending: false, arquivoOk: true, pranchaOk: true }), "");
+});
+
+test("mensagemErro tira o código interno do motivo e mantém o texto para quem lê", () => {
+  assert.equal(mensagemErro("geometria_invalida: O polígono é inválido (ex.: autointerseção)."), "O polígono é inválido (ex.: autointerseção).");
+  assert.equal(mensagemErro("O worker parou."), "O worker parou.");
+  assert.equal(mensagemErro("Erro: algo"), "Erro: algo"); // só código minúsculo com sublinhado é removido
+  assert.equal(mensagemErro(""), "");
+  assert.equal(mensagemErro(undefined), "");
 });

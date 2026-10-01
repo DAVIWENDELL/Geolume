@@ -17,6 +17,18 @@
 - Estados de autenticação, upload, fila, processamento, conclusão e falha.
 - Histórico de jobs e painel de documentos.
 
+## Composição da operação
+
+- A tela principal segue o fluxo visual `arquivo → validação → pré-visualização → prancha opcional → processamento → resultado → histórico`.
+- Em desktop, o fluxo de configuração fica à esquerda e a pré-visualização, o resultado e os documentos ficam à direita; o histórico fica compacto abaixo da área de trabalho.
+- Em telas menores, a ordem passa a ser arquivo, mapa, prancha recolhida, processamento, resultado e histórico.
+- A personalização da prancha permanece em `<details>` para não dominar o estado vazio.
+- O botão de processamento permanece no fluxo normal da página, sem `position: sticky`, para continuar alcançável quando a prancha estiver aberta e for mais alta que a viewport.
+- Identificadores técnicos ficam em detalhes expansíveis; o usuário final vê primeiro estado, documentos e orientações acionáveis.
+- Abaixo de 1024 px (tablet e celular), todo controle tocável tem alvo de pelo menos 44 px, inclusive Sair, Atualizar, "Outras camadas", "Detalhes técnicos" e Copiar.
+- Abaixo de 640 px, o cartão do histórico mostra arquivo, estado e data e o cartão inteiro abre o job; os downloads ficam no Resultado. Links dentro do cartão ocupavam o centro dele e transformavam o toque para abrir em download.
+- A falha de um job mostra o motivo sem o código interno do início (`geometria_invalida: ...`).
+
 ## Mapa
 
 - Mapa-base padrão: OpenStreetMap, com atribuição.
@@ -25,6 +37,7 @@
 - Catálogo de camadas vem do servidor (`GET /camadas`), em três grupos: disponíveis, dependem de fonte oficial e planejadas; camadas indisponíveis ficam desabilitadas com aviso.
 - OSM aparece só na pré-visualização, com o aviso "Somente na pré-visualização — não entra no PDF"; se o catálogo falhar, a tela fica sem mapa-base e o polígono continua visível.
 - Polígono pode ser mostrado/ocultado; estilo (Padrão, Técnico, Preto e branco) e opacidade do preenchimento ficam na personalização da prancha, valem igual na tela e no PDF, e o contorno nunca fica transparente.
+- A amostra "Polígono do imóvel" da legenda usa as mesmas cores e opacidade aplicadas ao polígono no mapa.
 - O botão de enquadrar deve continuar funcionando mesmo quando o polígono estiver oculto.
 - Falha de tiles não pode impedir upload, processamento ou downloads.
 

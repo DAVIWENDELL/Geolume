@@ -13,6 +13,9 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 - [x] Upload, histórico, polling, downloads e mapa Leaflet local.
 - [x] Personalização opcional da prancha com cores, logo e três layouts.
 - [x] Catálogo de camadas servido por `GET /camadas`, estilos do polígono (Padrão, Técnico, Preto e branco) e opacidade do preenchimento iguais na pré-visualização e no `mapa.pdf` (verificação final em 2026-10-01: suítes completas verdes, PDFs reais inspecionados, geração em container sem rede).
+- [x] Tela principal reorganizada para o fluxo de cliente: arquivo e configuração à esquerda, mapa e resultado à direita, histórico compacto abaixo; desktop e mobile verificados pelo Playwright.
+- [x] Botão Processar mantido alcançável com a prancha aberta, removendo o sticky da coluna de fluxo e cobrindo o comportamento com E2E.
+- [x] Varredura final de UX da tela principal (2026-10-01): amostra da legenda segue o estilo do polígono, alvos de 44 px em tablet e celular, histórico mobile sem links no cartão e falha sem código interno; cobertos por unitário e E2E.
 - [x] Testes unitários, worker, API e Playwright versionados.
 - [x] Proteções de autenticação, autorização, CSRF, limites e arquivos.
 

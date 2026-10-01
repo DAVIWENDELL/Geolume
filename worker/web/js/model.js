@@ -23,10 +23,11 @@ const LABELS = {
   unknown: "Desconhecido",
 };
 
+// O memorial é sempre preliminar: nada na tela o apresenta como documento definitivo.
 const FILES = [
-  ["mapa", "mapa.pdf"],
-  ["memorial", "memorial.pdf"],
-  ["resultado", "resultado.json"],
+  ["mapa", "mapa.pdf", "Mapa PDF", "Prancha A4 com o polígono, a tabela de vértices e a legenda."],
+  ["memorial", "memorial.pdf", "Memorial descritivo preliminar", "Descrição perimetral preliminar, para conferência técnica."],
+  ["resultado", "resultado.json", "Resultado JSON", "Área, perímetro e vértices calculados, para outros sistemas."],
 ];
 
 export function normalizeStatus(raw) {
@@ -44,7 +45,7 @@ export function isTerminal(status) {
 
 export function fileLinks(taskId) {
   const base = "/jobs/" + encodeURIComponent(taskId) + "/files/";
-  return FILES.map(([kind, filename]) => ({ kind, filename, href: base + kind }));
+  return FILES.map(([kind, filename, titulo, descricao]) => ({ kind, filename, titulo, descricao, href: base + kind }));
 }
 
 export function summarize(jobs) {
@@ -73,4 +74,27 @@ export function formatBytes(n) {
 
 export function isCurrent(selectedTaskId, responseTaskId) {
   return selectedTaskId != null && selectedTaskId === responseTaskId;
+}
+
+/** Etapa "arquivo" do envio: o que dizer sobre o arquivo escolhido e a leitura do polígono no navegador.
+ *  preview: null enquanto lê; { ok } ou { ok: false, message } quando terminou. */
+export function etapaArquivo({ file, check, preview } = {}) {
+  if (!file) return { estado: "vazio", texto: "Escolha um arquivo GeoJSON para começar." };
+  if (!check?.ok) return { estado: "invalido", texto: `${check?.message ?? "Arquivo inválido"}.` };
+  if (!preview) return { estado: "lendo", texto: "Conferindo o polígono…" };
+  if (preview.ok) return { estado: "valido", texto: "Polígono válido, pronto para processar." };
+  return { estado: "alerta", texto: `${preview.message} O processamento provavelmente falhará; você ainda pode enviar para confirmar.` };
+}
+
+/** Motivo de falha para quem lê: sem o código interno do início ("geometria_invalida: ..."). */
+export function mensagemErro(erro) {
+  return typeof erro === "string" ? erro.replace(/^[a-z_]+: /, "") : "";
+}
+
+/** Por que "Processar" está desabilitado, em uma frase; vazio quando pode enviar. */
+export function motivoProcessar({ sending, arquivoOk, pranchaOk }) {
+  if (sending) return "Enviando o arquivo…";
+  if (!arquivoOk) return "Escolha um arquivo GeoJSON válido para processar.";
+  if (!pranchaOk) return "Corrija a personalização da prancha para processar.";
+  return "";
 }

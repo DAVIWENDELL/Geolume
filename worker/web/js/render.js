@@ -1,7 +1,7 @@
 // Renderização: dados da API entram no DOM só por textContent e atributos.
 import { formatMetrics } from "./geo.js";
 import { camadaAtivavel, grupos, legendItems } from "./layers.js";
-import { fileLinks, formatBytes, isTerminal, normalizeStatus, statusLabel } from "./model.js";
+import { fileLinks, formatBytes, isTerminal, mensagemErro, normalizeStatus, statusLabel } from "./model.js";
 import { pranchaTitle, responsavelLine } from "./prancha.js";
 
 const STEPS = ["queued", "started", "end"];
@@ -60,8 +60,17 @@ function renderScalebar(bar, status) {
   bar.querySelector('[data-step="end"] span').textContent = status === "failed" ? "Falhou" : "Concluído";
 }
 
-function docLink({ kind, filename, href }) {
-  return el("a", { class: "doc", href, download: filename, "data-kind": kind }, filename);
+/** Cartão de download: título e descrição para quem lê; o link (o cartão inteiro, por CSS) tem o nome do arquivo. */
+function docCard({ kind, filename, href, titulo, descricao }) {
+  const card = el("div", { class: "doc", "data-kind": kind });
+  const tituloId = `doc-${kind}-titulo`;
+  const descId = `doc-${kind}-desc`;
+  card.append(
+    el("span", { class: "doc-titulo", id: tituloId }, titulo),
+    el("span", { class: "doc-desc", id: descId }, descricao),
+    el("a", { class: "doc-link", href, download: filename, "data-kind": kind, "aria-describedby": `${tituloId} ${descId}` }, filename),
+  );
+  return card;
 }
 
 /**
@@ -106,11 +115,11 @@ export function renderDetail(root, job, view = {}) {
   const error = q('[data-testid="detail-error"]');
   const showError = job.status === "failed";
   error.hidden = !showError;
-  error.textContent = showError ? job.erro || "O worker não informou o motivo da falha." : "";
+  error.textContent = showError ? mensagemErro(job.erro) || "O worker não informou o motivo da falha." : "";
 
   const links = q('[data-testid="detail-links"]');
   const completed = job.status === "completed";
-  links.replaceChildren(...(completed ? fileLinks(job.task_id).map(docLink) : []));
+  links.replaceChildren(...(completed ? fileLinks(job.task_id).map(docCard) : []));
   q("[data-docs-hint]").textContent = completed
     ? ""
     : job.status === "failed"
@@ -170,6 +179,12 @@ export function renderPranchaHead(root, view) {
   const swatch = root.querySelector('[data-testid="prancha-swatch"]');
   swatch.style.borderColor = view ? view.colors.contorno : "";
   swatch.style.backgroundColor = view ? rgba(view.colors.preenchimento, view.opacity) : "";
+}
+
+/** Amostra "Polígono do imóvel" da legenda do mapa com o estilo que o mapa aplicou (polygonStyle). */
+export function renderAmostraPoligono(root, { color, fillColor, fillOpacity }) {
+  root.style.setProperty("--poligono-contorno", color);
+  root.style.setProperty("--poligono-preenchimento", rgba(fillColor, fillOpacity));
 }
 
 /** Miniatura da prancha: blocos na posição de mapa.pdf; a legenda segue data-layout. */
@@ -246,20 +261,24 @@ export function renderCamadasPanel(root, catalogo, { erro = false } = {}) {
   aviso.hidden = !erro;
   aviso.textContent = erro ? CATALOGO_ERRO : "";
   const porGrupo = grupos(catalogo);
-  root.querySelector("[data-camadas-grupos]").replaceChildren(
-    ...GRUPOS.filter(([chave]) => porGrupo[chave].length).map(([chave, testid, titulo]) => {
-      const grupo = el("div", {
-        class: "camadas-grupo",
-        role: "group",
-        "data-testid": `camadas-grupo-${testid}`,
-        "aria-labelledby": `camadas-grupo-${testid}-titulo`,
-      });
-      const itens = el("div", { class: "camadas-itens" });
-      itens.append(...porGrupo[chave].map(camadaItem));
-      grupo.append(el("p", { class: "camadas-grupo-titulo", id: `camadas-grupo-${testid}-titulo` }, titulo), itens);
-      return grupo;
-    }),
-  );
+  const montarGrupo = ([chave, testid, titulo]) => {
+    const grupo = el("div", {
+      class: "camadas-grupo",
+      role: "group",
+      "data-testid": `camadas-grupo-${testid}`,
+      "aria-labelledby": `camadas-grupo-${testid}-titulo`,
+    });
+    const itens = el("div", { class: "camadas-itens" });
+    itens.append(...porGrupo[chave].map(camadaItem));
+    grupo.append(el("p", { class: "camadas-grupo-titulo", id: `camadas-grupo-${testid}-titulo` }, titulo), itens);
+    return grupo;
+  };
+  const comItens = ([chave]) => porGrupo[chave].length;
+  // Disponíveis à vista; o que ainda não existe fica recolhido em "Outras camadas", sem perder o aviso.
+  root.querySelector("[data-camadas-grupos]").replaceChildren(...GRUPOS.slice(0, 1).filter(comItens).map(montarGrupo));
+  const outros = GRUPOS.slice(1).filter(comItens);
+  root.querySelector("[data-camadas-mais]").replaceChildren(...outros.map(montarGrupo));
+  root.querySelector('[data-testid="camadas-mais"]').hidden = !outros.length;
 }
 
 /**
@@ -317,6 +336,21 @@ export function renderEstiloCards(root, estilos, selecionado) {
       return card;
     }),
   );
+}
+
+/** Etapa 2 (arquivo e validação): etapa = etapaArquivo(...) de model.js. */
+export function renderArquivo(root, etapa) {
+  root.dataset.estado = etapa.estado;
+  root.querySelector('[data-testid="arquivo-status"]').textContent = etapa.texto;
+}
+
+/** Etapa 4: resumo das escolhas (resumoEnvio de prancha.js), por textContent. */
+export function renderResumo(root, itens) {
+  root.replaceChildren(...itens.map(({ rotulo, valor }) => {
+    const linha = el("div", { class: "resumo-item" });
+    linha.append(el("dt", {}, rotulo), el("dd", {}, valor));
+    return linha;
+  }));
 }
 
 export function renderSummary(root, counts) {
