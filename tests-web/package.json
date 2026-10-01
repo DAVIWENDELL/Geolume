@@ -1,0 +1,12 @@
+{
+  "name": "geolume-tests-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "node --test \"unit/**/*.test.mjs\"",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

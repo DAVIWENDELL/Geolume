@@ -1,0 +1,218 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - img "GeoLume" [ref=e3]
+    - heading "Centro de operação" [level=1] [ref=e4]
+    - status [ref=e5]:
+      - generic [ref=e7]: API online
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - region [ref=e10]:
+        - heading "Novo processamento" [level=2] [ref=e11]
+        - paragraph [ref=e12]: Um polígono por arquivo GeoJSON, até 10 MB.
+        - generic [ref=e13] [cursor=pointer]:
+          - strong [ref=e18]: Arraste o GeoJSON para cá
+          - generic [ref=e19]: ou escolha um arquivo do computador
+          - button "Arraste o GeoJSON para cá ou escolha um arquivo do computador" [ref=e20]
+        - paragraph [ref=e21]: Nenhum arquivo selecionado
+        - status [ref=e22]: gleba_rural_exemplo.geojson enviado. Acompanhe o job ao lado.
+        - button "Processar" [disabled] [ref=e23]
+      - region [ref=e24]:
+        - heading "Job selecionado" [level=2] [ref=e26]
+        - generic [ref=e151]:
+          - paragraph [ref=e152]: gleba_rural_exemplo.geojson
+          - generic [ref=e153]:
+            - generic [ref=e154]:
+              - term [ref=e155]: job_id
+              - definition [ref=e156]:
+                - code [ref=e157]: f35099a4ea33437f8af11150157e8c24
+              - button "Copiar" [ref=e158] [cursor=pointer]
+            - generic [ref=e159]:
+              - term [ref=e160]: task_id
+              - definition [ref=e161]:
+                - code [ref=e162]: aba0e02b-a0f5-4138-8b01-10bddaa82f8e
+              - button "Copiar" [ref=e163] [cursor=pointer]
+          - paragraph [ref=e164]:
+            - text: "Estado:"
+            - strong [ref=e165]: Concluído
+          - list [aria-hidden] [ref=e166]:
+            - listitem [ref=e167]:
+              - generic [ref=e168]: Na fila
+            - listitem [ref=e169]:
+              - generic [ref=e170]: Em execução
+            - listitem [ref=e171]:
+              - generic [ref=e172]: Concluído
+          - heading "Documentos gerados" [level=3] [ref=e173]
+          - generic [ref=e281]:
+            - link "mapa.pdf Mapa" [ref=e282] [cursor=pointer]:
+              - /url: /jobs/aba0e02b-a0f5-4138-8b01-10bddaa82f8e/files/mapa
+            - link "memorial.pdf Memorial descritivo" [ref=e283] [cursor=pointer]:
+              - /url: /jobs/aba0e02b-a0f5-4138-8b01-10bddaa82f8e/files/memorial
+            - link "resultado.json Dados do processamento" [ref=e284] [cursor=pointer]:
+              - /url: /jobs/aba0e02b-a0f5-4138-8b01-10bddaa82f8e/files/resultado
+          - paragraph
+    - region [ref=e28]:
+      - generic [ref=e29]:
+        - heading "Histórico últimos 20" [level=2] [ref=e30]
+        - button "Atualizar" [ref=e31] [cursor=pointer]
+      - list "Contagem por estado" [ref=e32]:
+        - listitem [ref=e33]:
+          - generic [ref=e34]: "0"
+          - text: na fila
+        - listitem [ref=e35]:
+          - generic [ref=e36]: "2"
+          - text: em execução
+        - listitem [ref=e37]:
+          - generic [ref=e38]: "10"
+          - text: concluídos
+        - listitem [ref=e39]:
+          - generic [ref=e40]: "2"
+          - text: com falha
+      - table [ref=e41]:
+        - caption [ref=e42]: Processamentos recentes. Selecione uma linha para abrir o job.
+        - rowgroup [ref=e43]:
+          - row [ref=e44]:
+            - columnheader "Arquivo" [ref=e45]
+            - columnheader "Estado" [ref=e46]
+            - columnheader "Criado em" [ref=e47]
+            - columnheader "Documentos" [ref=e48]
+        - rowgroup [ref=e49]:
+          - row [ref=e285] [cursor=pointer]:
+            - cell "gleba_rural_exemplo.geojson" [ref=e286]
+            - cell "Concluído" [ref=e287]
+            - cell "27/09/2026, 22:13" [ref=e288]
+            - cell [ref=e289]:
+              - generic [ref=e290]:
+                - link "mapa.pdf" [ref=e291]:
+                  - /url: /jobs/aba0e02b-a0f5-4138-8b01-10bddaa82f8e/files/mapa
+                - link "memorial.pdf" [ref=e292]:
+                  - /url: /jobs/aba0e02b-a0f5-4138-8b01-10bddaa82f8e/files/memorial
+                - link "resultado.json" [ref=e293]:
+                  - /url: /jobs/aba0e02b-a0f5-4138-8b01-10bddaa82f8e/files/resultado
+          - row [ref=e294] [cursor=pointer]:
+            - cell "lote_simples.geojson" [ref=e295]
+            - cell "Concluído" [ref=e296]
+            - cell "27/09/2026, 22:12" [ref=e297]
+            - cell [ref=e298]:
+              - generic [ref=e299]:
+                - link "mapa.pdf" [ref=e300]:
+                  - /url: /jobs/2ac934d3-9e84-420c-a47e-19231f8c2c1c/files/mapa
+                - link "memorial.pdf" [ref=e301]:
+                  - /url: /jobs/2ac934d3-9e84-420c-a47e-19231f8c2c1c/files/memorial
+                - link "resultado.json" [ref=e302]:
+                  - /url: /jobs/2ac934d3-9e84-420c-a47e-19231f8c2c1c/files/resultado
+          - row [ref=e303] [cursor=pointer]:
+            - cell "lote_simples.geojson" [ref=e304]
+            - cell "Concluído" [ref=e305]
+            - cell "27/09/2026, 22:12" [ref=e306]
+            - cell [ref=e307]:
+              - generic [ref=e308]:
+                - link "mapa.pdf" [ref=e309]:
+                  - /url: /jobs/4b7c1663-cdb7-4473-beeb-19ee7532ca05/files/mapa
+                - link "memorial.pdf" [ref=e310]:
+                  - /url: /jobs/4b7c1663-cdb7-4473-beeb-19ee7532ca05/files/memorial
+                - link "resultado.json" [ref=e311]:
+                  - /url: /jobs/4b7c1663-cdb7-4473-beeb-19ee7532ca05/files/resultado
+          - row [ref=e312] [cursor=pointer]:
+            - cell "<img src=x onerror=%22window.__xss=1%22>.geojson" [ref=e313]
+            - cell "Concluído" [ref=e314]
+            - cell "27/09/2026, 22:12" [ref=e315]
+            - cell [ref=e316]:
+              - generic [ref=e317]:
+                - link "mapa.pdf" [ref=e318]:
+                  - /url: /jobs/22c8c048-6314-409c-874c-17cb95682357/files/mapa
+                - link "memorial.pdf" [ref=e319]:
+                  - /url: /jobs/22c8c048-6314-409c-874c-17cb95682357/files/memorial
+                - link "resultado.json" [ref=e320]:
+                  - /url: /jobs/22c8c048-6314-409c-874c-17cb95682357/files/resultado
+          - row [ref=e321] [cursor=pointer]:
+            - cell "autointersecao.geojson" [ref=e322]
+            - cell "Falhou" [ref=e323]
+            - cell "27/09/2026, 22:12" [ref=e324]
+            - cell "—" [ref=e325]
+          - row [ref=e326] [cursor=pointer]:
+            - cell "gleba_rural_exemplo.geojson" [ref=e327]
+            - cell "Concluído" [ref=e328]
+            - cell "27/09/2026, 22:12" [ref=e329]
+            - cell [ref=e330]:
+              - generic [ref=e331]:
+                - link "mapa.pdf" [ref=e332]:
+                  - /url: /jobs/d6369e11-ecb6-4445-a3cd-6292956e8884/files/mapa
+                - link "memorial.pdf" [ref=e333]:
+                  - /url: /jobs/d6369e11-ecb6-4445-a3cd-6292956e8884/files/memorial
+                - link "resultado.json" [ref=e334]:
+                  - /url: /jobs/d6369e11-ecb6-4445-a3cd-6292956e8884/files/resultado
+          - row [ref=e335] [cursor=pointer]:
+            - cell "<img src=x onerror=%22window.__xss=1%22>.geojson" [ref=e336]
+            - cell "Concluído" [ref=e337]
+            - cell "27/09/2026, 22:12" [ref=e338]
+            - cell [ref=e339]:
+              - generic [ref=e340]:
+                - link "mapa.pdf" [ref=e341]:
+                  - /url: /jobs/00c1370f-f706-4371-a9aa-0d4096821333/files/mapa
+                - link "memorial.pdf" [ref=e342]:
+                  - /url: /jobs/00c1370f-f706-4371-a9aa-0d4096821333/files/memorial
+                - link "resultado.json" [ref=e343]:
+                  - /url: /jobs/00c1370f-f706-4371-a9aa-0d4096821333/files/resultado
+          - row [ref=e344] [cursor=pointer]:
+            - cell "autointersecao.geojson" [ref=e345]
+            - cell "Falhou" [ref=e346]
+            - cell "27/09/2026, 22:12" [ref=e347]
+            - cell "—" [ref=e348]
+          - row [ref=e349] [cursor=pointer]:
+            - cell "gleba_rural_exemplo.geojson" [ref=e350]
+            - cell "Concluído" [ref=e351]
+            - cell "27/09/2026, 22:12" [ref=e352]
+            - cell [ref=e353]:
+              - generic [ref=e354]:
+                - link "mapa.pdf" [ref=e355]:
+                  - /url: /jobs/ef20315a-13d6-4eb1-aa92-3db19e74d0db/files/mapa
+                - link "memorial.pdf" [ref=e356]:
+                  - /url: /jobs/ef20315a-13d6-4eb1-aa92-3db19e74d0db/files/memorial
+                - link "resultado.json" [ref=e357]:
+                  - /url: /jobs/ef20315a-13d6-4eb1-aa92-3db19e74d0db/files/resultado
+          - row [ref=e358] [cursor=pointer]:
+            - cell "autointersecao.geojson" [ref=e359]
+            - cell "Em execução" [ref=e360]
+            - cell "27/09/2026, 22:01" [ref=e361]
+            - cell "—" [ref=e362]
+          - row [ref=e363] [cursor=pointer]:
+            - cell "gleba_rural_exemplo.geojson" [ref=e364]
+            - cell "Concluído" [ref=e365]
+            - cell "27/09/2026, 22:01" [ref=e366]
+            - cell [ref=e367]:
+              - generic [ref=e368]:
+                - link "mapa.pdf" [ref=e369]:
+                  - /url: /jobs/d4eb4838-cf85-4399-9a7e-98ec252db43f/files/mapa
+                - link "memorial.pdf" [ref=e370]:
+                  - /url: /jobs/d4eb4838-cf85-4399-9a7e-98ec252db43f/files/memorial
+                - link "resultado.json" [ref=e371]:
+                  - /url: /jobs/d4eb4838-cf85-4399-9a7e-98ec252db43f/files/resultado
+          - row [ref=e372] [cursor=pointer]:
+            - cell "gleba_rural_exemplo.geojson" [ref=e373]
+            - cell "Em execução" [ref=e374]
+            - cell "27/09/2026, 21:59" [ref=e375]
+            - cell "—" [ref=e376]
+          - row [ref=e377] [cursor=pointer]:
+            - cell "gleba_rural_exemplo.geojson" [ref=e378]
+            - cell "Concluído" [ref=e379]
+            - cell "27/09/2026, 21:58" [ref=e380]
+            - cell [ref=e381]:
+              - generic [ref=e382]:
+                - link "mapa.pdf" [ref=e383]:
+                  - /url: /jobs/1d4694ae-0d0a-493f-9e22-060b37d3dd18/files/mapa
+                - link "memorial.pdf" [ref=e384]:
+                  - /url: /jobs/1d4694ae-0d0a-493f-9e22-060b37d3dd18/files/memorial
+                - link "resultado.json" [ref=e385]:
+                  - /url: /jobs/1d4694ae-0d0a-493f-9e22-060b37d3dd18/files/resultado
+          - row [ref=e386] [cursor=pointer]:
+            - cell "gleba_rural_exemplo.geojson" [ref=e387]
+            - cell "Concluído" [ref=e388]
+            - cell "27/09/2026, 20:59" [ref=e389]
+            - cell [ref=e390]:
+              - generic [ref=e391]:
+                - link "mapa.pdf" [ref=e392]:
+                  - /url: /jobs/bab2dc9b-3175-42b3-9815-6a2f696dd4dd/files/mapa
+                - link "memorial.pdf" [ref=e393]:
+                  - /url: /jobs/bab2dc9b-3175-42b3-9815-6a2f696dd4dd/files/memorial
+                - link "resultado.json" [ref=e394]:
+                  - /url: /jobs/bab2dc9b-3175-42b3-9815-6a2f696dd4dd/files/resultado

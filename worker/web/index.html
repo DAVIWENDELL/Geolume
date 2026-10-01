@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Centro de operação GeoLume</title>
+  <meta name="description" content="Envie um GeoJSON, acompanhe o processamento e baixe mapa, memorial e resultado.">
+  <link rel="icon" type="image/png" href="/assets/geolume-marca-transparente.png">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/styles.css">
+  <!-- Leaflet clássico e opcional: se não carregar, a tela funciona sem o mapa. -->
+  <script defer src="/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <img class="topbar-logo" src="/assets/geolume-logo-transparente.png" alt="GeoLume" width="160" height="54">
+    <h1 class="topbar-title">Centro de operação</h1>
+    <p class="health" data-testid="health" data-state="checking" role="status" aria-live="polite">
+      <span class="health-dot" aria-hidden="true"></span><span class="health-text">Verificando API…</span>
+    </p>
+    <div class="session" data-testid="session" hidden>
+      <span class="session-user" data-testid="session-user"></span>
+      <button class="btn btn-secondary" data-testid="logout" type="button">Sair</button>
+    </div>
+  </header>
+
+  <!-- Sem sessão, só o login aparece; a operação abre depois de GET /auth/me ou do login. -->
+  <main class="login-wrap" data-testid="login" hidden>
+    <section class="panel login" aria-labelledby="login-title">
+      <h2 id="login-title">Entrar</h2>
+      <p class="hint">Use o e-mail e a senha cadastrados pelo administrador.</p>
+      <form data-login-form method="post" action="/auth/login">
+        <label for="login-email">E-mail</label>
+        <input id="login-email" data-testid="login-email" type="email" autocomplete="username" required>
+        <label for="login-password">Senha</label>
+        <input id="login-password" data-testid="login-password" type="password" autocomplete="current-password" required>
+        <p class="login-message" data-testid="login-message" role="status" aria-live="polite"></p>
+        <button class="btn btn-primary" data-testid="login-submit" type="submit">Entrar</button>
+      </form>
+    </section>
+  </main>
+
+  <main class="layout" data-testid="app" hidden>
+    <div class="col-operate">
+      <section class="panel" aria-labelledby="upload-title">
+        <h2 id="upload-title">Novo processamento</h2>
+        <p class="hint">Um polígono por arquivo GeoJSON, até 10 MB.</p>
+
+        <label class="drop" data-testid="upload-drop" for="upload-input">
+          <span class="drop-corner tl" aria-hidden="true"></span>
+          <span class="drop-corner tr" aria-hidden="true"></span>
+          <span class="drop-corner bl" aria-hidden="true"></span>
+          <span class="drop-corner br" aria-hidden="true"></span>
+          <strong>Arraste o GeoJSON para cá</strong>
+          <span class="drop-sub">ou <u>escolha um arquivo</u> do computador</span>
+          <input id="upload-input" data-testid="upload-input" class="visually-hidden" type="file" accept=".geojson,application/geo+json">
+        </label>
+
+        <p class="upload-file" data-testid="upload-file">Nenhum arquivo selecionado</p>
+        <details class="prancha-form" data-testid="prancha-form">
+          <summary>Personalizar prancha (opcional)</summary>
+          <div class="prancha-fields">
+            <p class="hint">Vale para o mapa.pdf dos próximos envios. O memorial não muda.</p>
+            <label for="prancha-projeto">Nome do projeto</label>
+            <input id="prancha-projeto" data-testid="prancha-input-projeto" type="text" maxlength="100" autocomplete="off">
+            <label for="prancha-responsavel">Responsável técnico</label>
+            <input id="prancha-responsavel" data-testid="prancha-input-responsavel" type="text" maxlength="100" autocomplete="off">
+            <label for="prancha-logo">Logo da empresa <span class="hint-inline">(PNG ou JPEG, até 2 MB)</span></label>
+            <input id="prancha-logo" data-testid="prancha-input-logo" type="file" accept="image/png,image/jpeg">
+            <button class="btn btn-quiet" type="button" data-testid="prancha-logo-remove" hidden>Remover logo</button>
+            <!-- Cartões montados por renderEstiloCards a partir dos estilos de GET /camadas. -->
+            <fieldset class="prancha-estilos" data-testid="prancha-estilos">
+              <legend>Estilo do polígono</legend>
+              <div class="prancha-estilos-cards" data-estilos-cards></div>
+            </fieldset>
+            <div class="prancha-cores">
+              <label class="prancha-cor">Cor principal (contorno)
+                <input data-testid="prancha-input-contorno" type="color" value="#c80000"></label>
+              <label class="prancha-cor">Cor de preenchimento
+                <input data-testid="prancha-input-preenchimento" type="color" value="#ffc800"></label>
+            </div>
+            <div class="prancha-alfa">
+              <label for="prancha-alfa">Opacidade do preenchimento (entra no PDF)</label>
+              <input id="prancha-alfa" data-testid="prancha-input-alfa" type="range" min="0" max="100" step="1" value="35">
+              <output for="prancha-alfa" data-testid="prancha-alfa-valor">35%</output>
+            </div>
+            <!-- Cartões montados por renderLayoutCards a partir de LAYOUTS (prancha.js). -->
+            <fieldset class="prancha-layouts" data-testid="prancha-layouts">
+              <legend>Layout da prancha</legend>
+            </fieldset>
+            <p class="prancha-message" data-testid="prancha-message" aria-live="polite"></p>
+            <button class="btn btn-secondary" type="button" data-testid="prancha-reset">Restaurar padrão</button>
+          </div>
+        </details>
+        <p class="upload-message" data-testid="upload-message" role="status" aria-live="polite"></p>
+        <button class="btn btn-primary" data-testid="upload-submit" type="button" disabled>Processar</button>
+      </section>
+
+      <section class="panel preview" data-testid="preview" aria-labelledby="preview-title">
+        <h2 id="preview-title">Pré-visualização</h2>
+        <p class="preview-message" data-testid="preview-message" role="status" aria-live="polite">Selecione um GeoJSON para ver o polígono no mapa.</p>
+        <div class="map-tools" data-testid="map-tools" hidden>
+          <!-- Grupos montados por renderCamadasPanel a partir de GET /camadas; tudo por textContent. -->
+          <fieldset class="map-bases" data-testid="camadas-painel">
+            <legend>Camadas do mapa</legend>
+            <p class="camadas-erro" data-testid="camadas-erro" role="status" hidden></p>
+            <div class="camadas-grupos" data-camadas-grupos></div>
+          </fieldset>
+          <div class="map-polygon">
+            <button class="btn btn-secondary" data-testid="polygon-fit" type="button">Enquadrar polígono</button>
+          </div>
+        </div>
+        <!-- Cabeçalho da prancha como sai no mapa.pdf; tudo por textContent. -->
+        <div class="prancha-head" data-testid="prancha-head" hidden>
+          <div class="prancha-head-text">
+            <p class="prancha-title" data-testid="prancha-title"></p>
+            <p class="prancha-responsavel" data-testid="prancha-responsavel" hidden></p>
+          </div>
+          <img class="prancha-logo" data-testid="prancha-logo" alt="Logo da empresa" hidden>
+          <span class="prancha-mini" data-testid="prancha-miniatura" data-layout="nenhuma" aria-hidden="true">
+            <span class="mini-mapa"></span><span class="mini-coluna"></span><span class="mini-tabela"></span><span class="mini-legenda"></span>
+          </span>
+          <p class="prancha-legenda" data-testid="prancha-legenda" hidden>
+            <span class="prancha-swatch" data-testid="prancha-swatch" aria-hidden="true"></span>Limite do imóvel
+          </p>
+        </div>
+        <div class="map" data-testid="preview-map" role="region" aria-label="Mapa da pré-visualização" hidden></div>
+        <div class="map-info" data-testid="map-info" hidden>
+          <ul class="map-legend" data-testid="map-legend" aria-label="Legenda do mapa"></ul>
+          <p class="map-tiles-status" data-testid="map-tiles-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="metrics" data-testid="preview-metrics" hidden>
+          <dl>
+            <div class="metric"><dt>Área</dt><dd data-testid="metric-area"></dd></div>
+            <div class="metric"><dt>Perímetro</dt><dd data-testid="metric-perimetro"></dd></div>
+          </dl>
+          <p class="hint">Valores preliminares calculados pelo worker em SIRGAS 2000 / UTM; conferir antes de uso oficial.</p>
+        </div>
+      </section>
+
+      <section class="panel detail" data-testid="detail" aria-labelledby="detail-title">
+        <div class="panel-head">
+          <h2 id="detail-title">Job selecionado</h2>
+          <span class="detail-activity" data-activity hidden>Consultando…</span>
+        </div>
+        <p class="visually-hidden" role="status" data-status-announcer></p>
+
+        <p class="empty" data-detail-empty>Nenhum job selecionado. Envie um GeoJSON ou escolha um item do histórico.</p>
+
+        <div data-detail-body hidden>
+          <p class="detail-file" data-detail-file></p>
+          <dl class="ids">
+            <div class="id-row">
+              <dt>job_id</dt>
+              <dd><code data-testid="detail-job-id"></code></dd>
+              <button class="btn btn-quiet" type="button" data-copy="detail-job-id">Copiar</button>
+            </div>
+            <div class="id-row">
+              <dt>task_id</dt>
+              <dd><code data-testid="detail-task-id"></code></dd>
+              <button class="btn btn-quiet" type="button" data-copy="detail-task-id">Copiar</button>
+            </div>
+          </dl>
+
+          <p class="detail-state">Estado: <strong class="status" data-testid="detail-status"></strong></p>
+          <ol class="scalebar" data-scalebar aria-hidden="true">
+            <li data-step="queued"><span>Na fila</span></li>
+            <li data-step="started"><span>Em execução</span></li>
+            <li data-step="end"><span>Concluído</span></li>
+          </ol>
+
+          <p class="notice" data-poll-warning hidden></p>
+          <p class="error-box" data-testid="detail-error" hidden></p>
+
+          <h3 class="docs-title">Documentos gerados</h3>
+          <div class="docs" data-testid="detail-links"></div>
+          <p class="hint" data-docs-hint></p>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel col-monitor" aria-labelledby="jobs-title">
+      <div class="panel-head">
+        <h2 id="jobs-title">Histórico <span class="hint">últimos 20</span></h2>
+        <button class="btn btn-secondary" data-testid="jobs-refresh" type="button">Atualizar</button>
+      </div>
+
+      <ul class="summary" data-testid="summary" aria-label="Contagem por estado">
+        <li data-status="queued"><span class="count" data-count>0</span> na fila</li>
+        <li data-status="started"><span class="count" data-count>0</span> em execução</li>
+        <li data-status="completed"><span class="count" data-count>0</span> concluídos</li>
+        <li data-status="failed"><span class="count" data-count>0</span> com falha</li>
+      </ul>
+
+      <div class="jobs-error" data-testid="jobs-error" role="alert" hidden>
+        <span data-jobs-error-text></span>
+        <button class="btn btn-secondary" type="button" data-jobs-retry>Tentar novamente</button>
+      </div>
+
+      <table class="jobs" data-testid="jobs-table">
+        <caption class="visually-hidden">Processamentos recentes. Selecione uma linha para abrir o job.</caption>
+        <thead>
+          <tr><th scope="col">Arquivo</th><th scope="col">Estado</th><th scope="col">Criado em</th><th scope="col">Documentos</th></tr>
+        </thead>
+        <tbody data-jobs-body>
+          <tr class="jobs-placeholder" data-jobs-loading><td colspan="4">Carregando…</td></tr>
+        </tbody>
+      </table>
+      <p class="empty" data-testid="jobs-empty" hidden>Nenhum processamento ainda. Envie o primeiro GeoJSON em Novo processamento.</p>
+    </section>
+  </main>
+</body>
+</html>

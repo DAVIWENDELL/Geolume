@@ -1,0 +1,38 @@
+GeoLume — Mapa de Localização
+
+
+
+
+                                                                       Imóvel: Sítio Boa Vista
+
+                                                                       Proprietário: Proprietário de exemplo
+
+                                                                       Município: Brasília
+
+                                                                       UF: DF
+
+                                                                       Matrícula: EXEMPLO-0001
+
+                                                                       Tipo: Gleba rural
+
+
+
+                                                                       SIRGAS 2000 / UTM — EPSG:31983
+                                                                       Área: 27.1773 ha
+                                                                       Perímetro: 1959.36 m
+                                                                       Vértices: 6
+
+
+
+
+Tabela de vértices
+                                                                       0         80          160   240         320 m
+Vértice   E (m)     N (m)    Azimute    Dist. (m)
+────────────────────────────────────────────────────────────────────
+V1      185981.40 8257079.61    78°45'28"   305.38
+V2      186280.92 8257139.14   138°28'51"    263.04
+V3      186455.28 8256942.20   189°22'23"    303.79
+V4      186405.80 8256642.47   253°28'37"    367.71
+V5      186053.28 8256537.89   306°57'31"    325.57
+V6      185793.12 8256733.64    28°33'17"   393.88
+

@@ -1,0 +1,58 @@
+services:
+  worker:
+    build: ./worker
+    image: geolume-worker:poc
+    volumes:
+      - ./worker:/app
+      - ./saida:/saida
+    mem_limit: 2g
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  postgis:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: geolume
+      POSTGRES_USER: geolume
+      POSTGRES_PASSWORD: geolume
+    volumes:
+      - geolume-postgis:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    image: geolume-worker:poc
+    command: ["python3", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ./worker:/app
+      - ./saida:/saida
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DATABASE_URL: postgresql://geolume:geolume@postgis:5432/geolume
+    depends_on:
+      - redis
+      - postgis
+    ports:
+      - "127.0.0.1:8000:8000"
+    mem_limit: 2g
+
+  celery:
+    image: geolume-worker:poc
+    command: ["python3", "-m", "celery", "-A", "celery_app:celery", "worker", "--loglevel=info", "--pool=solo"]
+    volumes:
+      - ./worker:/app
+      - ./saida:/saida
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      GEOLUME_OUTPUT_DIR: /saida
+      DATABASE_URL: postgresql://geolume:geolume@postgis:5432/geolume
+    depends_on:
+      - redis
+      - postgis
+    mem_limit: 2g
+
+volumes:
+  geolume-postgis:

@@ -1,0 +1,23 @@
+
+Running 18 tests using 1 worker
+
+  ✓   1 [chrome-desktop] › e2e\hardening.spec.mjs:76:1 › documentação da API não é pública (58ms)
+  ✓   2 [chrome-desktop] › e2e\hardening.spec.mjs:82:1 › arquivo de exatamente 10 MB é aceito (375ms)
+  ✓   3 [chrome-desktop] › e2e\hardening.spec.mjs:92:1 › 1 byte acima de 10 MB recebe 413 em /jobs/async e /jobs, sem job nem arquivo (635ms)
+  ✓   4 [chrome-desktop] › e2e\hardening.spec.mjs:105:1 › Content-Length de 50 MB é recusado antes de o corpo ser enviado (22ms)
+  ✓   5 [chrome-desktop] › e2e\hardening.spec.mjs:120:1 › upload interrompido não cria job nem arquivo (2.0s)
+  ✓   6 [chrome-desktop] › e2e\hardening.spec.mjs:138:1 › upload anônimo recebe 401 antes de o corpo ser enviado (Content-Length e chunked) (251ms)
+  ✓   7 [chrome-desktop] › e2e\hardening.spec.mjs:163:1 › upload anônimo com corpo inteiro também não cria job nem arquivo (184ms)
+  ✓   8 [chrome-desktop] › e2e\hardening.spec.mjs:179:1 › respostas dos jobs só têm campos públicos e os links de download funcionam (643ms)
+  ✓   9 [chrome-desktop] › e2e\hardening.spec.mjs:212:1 › usuário logado sem o header de CSRF continua recebendo 403 no upload (226ms)
+  ✓  10 [chrome-mobile] › e2e\hardening.spec.mjs:76:1 › documentação da API não é pública (57ms)
+  ✓  11 [chrome-mobile] › e2e\hardening.spec.mjs:82:1 › arquivo de exatamente 10 MB é aceito (373ms)
+  ✓  12 [chrome-mobile] › e2e\hardening.spec.mjs:92:1 › 1 byte acima de 10 MB recebe 413 em /jobs/async e /jobs, sem job nem arquivo (651ms)
+  ✓  13 [chrome-mobile] › e2e\hardening.spec.mjs:105:1 › Content-Length de 50 MB é recusado antes de o corpo ser enviado (20ms)
+  ✓  14 [chrome-mobile] › e2e\hardening.spec.mjs:120:1 › upload interrompido não cria job nem arquivo (2.0s)
+  ✓  15 [chrome-mobile] › e2e\hardening.spec.mjs:138:1 › upload anônimo recebe 401 antes de o corpo ser enviado (Content-Length e chunked) (247ms)
+  ✓  16 [chrome-mobile] › e2e\hardening.spec.mjs:163:1 › upload anônimo com corpo inteiro também não cria job nem arquivo (187ms)
+  ✓  17 [chrome-mobile] › e2e\hardening.spec.mjs:179:1 › respostas dos jobs só têm campos públicos e os links de download funcionam (642ms)
+  ✓  18 [chrome-mobile] › e2e\hardening.spec.mjs:212:1 › usuário logado sem o header de CSRF continua recebendo 403 no upload (231ms)
+
+  18 passed (14.0s)

@@ -1,0 +1,166 @@
+{
+ "camadas": [
+  {
+   "id": "ruas_osm",
+   "nome": "Mapa de ruas (OpenStreetMap)",
+   "tipo": "raster",
+   "grupo": "base",
+   "situacao": "disponivel",
+   "ordem": 0,
+   "fonte": {
+    "nome": "OpenStreetMap",
+    "licenca": "ODbL",
+    "termos_url": "https://www.openstreetmap.org/copyright",
+    "atribuicao": {
+     "texto": "© Contribuidores do OpenStreetMap",
+     "url": "https://www.openstreetmap.org/copyright"
+    },
+    "atualizacao": "contínua"
+   },
+   "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+   "max_zoom": 19,
+   "exporta_pdf": false,
+   "visivel": true,
+   "aviso": "Somente na pré-visualização — não entra no PDF"
+  },
+  {
+   "id": "nenhum",
+   "nome": "Sem mapa-base",
+   "tipo": "nenhum",
+   "grupo": "base",
+   "situacao": "disponivel",
+   "ordem": 0,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": false,
+   "visivel": false,
+   "aviso": null
+  },
+  {
+   "id": "poligono",
+   "nome": "Polígono do imóvel",
+   "tipo": "vetor",
+   "grupo": "sobreposicao",
+   "situacao": "disponivel",
+   "ordem": 100,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": true,
+   "visivel": true,
+   "aviso": null
+  },
+  {
+   "id": "limites_municipais",
+   "nome": "Limites municipais",
+   "tipo": "vetor",
+   "grupo": "sobreposicao",
+   "situacao": "depende_fonte_oficial",
+   "ordem": 50,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": false,
+   "visivel": false,
+   "aviso": "Fonte oficial não definida"
+  },
+  {
+   "id": "hidrografia",
+   "nome": "Hidrografia",
+   "tipo": "vetor",
+   "grupo": "sobreposicao",
+   "situacao": "depende_fonte_oficial",
+   "ordem": 40,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": false,
+   "visivel": false,
+   "aviso": "Fonte oficial não definida"
+  },
+  {
+   "id": "rodovias",
+   "nome": "Rodovias",
+   "tipo": "vetor",
+   "grupo": "sobreposicao",
+   "situacao": "depende_fonte_oficial",
+   "ordem": 45,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": false,
+   "visivel": false,
+   "aviso": "Fonte oficial não definida"
+  },
+  {
+   "id": "satelite",
+   "nome": "Satélite",
+   "tipo": "raster",
+   "grupo": "base",
+   "situacao": "depende_fonte_oficial",
+   "ordem": 0,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": false,
+   "visivel": false,
+   "aviso": "Sem provedor licenciado"
+  },
+  {
+   "id": "topografia",
+   "nome": "Curvas de nível / relevo",
+   "tipo": "vetor",
+   "grupo": "sobreposicao",
+   "situacao": "planejada",
+   "ordem": 30,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": false,
+   "visivel": false,
+   "aviso": "Planejada"
+  },
+  {
+   "id": "edificacoes",
+   "nome": "Edificações",
+   "tipo": "vetor",
+   "grupo": "sobreposicao",
+   "situacao": "planejada",
+   "ordem": 60,
+   "fonte": null,
+   "url": null,
+   "max_zoom": null,
+   "exporta_pdf": false,
+   "visivel": false,
+   "aviso": "Planejada"
+  }
+ ],
+ "estilos": [
+  {
+   "id": "padrao",
+   "nome": "Padrão",
+   "contorno": "#C80000",
+   "preenchimento": "#FFC800",
+   "espessura_mm": 0.6,
+   "espessura_px": 3
+  },
+  {
+   "id": "tecnico",
+   "nome": "Técnico",
+   "contorno": "#1F2937",
+   "preenchimento": "#9CA3AF",
+   "espessura_mm": 0.35,
+   "espessura_px": 2
+  },
+  {
+   "id": "pb",
+   "nome": "Preto e branco",
+   "contorno": "#000000",
+   "preenchimento": "#FFFFFF",
+   "espessura_mm": 0.5,
+   "espessura_px": 2
+  }
+ ],
+ "alfa_padrao": 0.35
+}

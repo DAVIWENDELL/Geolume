@@ -1,0 +1,4 @@
+Leaflet 1.9.4 (BSD-2-Clause) — https://leafletjs.com
+Origem: npm pack leaflet@1.9.4
+npm integrity: sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==
+Arquivos copiados de dist/ sem alteração: leaflet.js, leaflet.js.map, leaflet.css, images/.

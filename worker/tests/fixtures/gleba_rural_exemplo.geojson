@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "name": "gleba_rural_exemplo",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "EPSG:4326"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "nome_imovel": "Sítio Boa Vista",
+        "proprietario": "Proprietário de exemplo",
+        "municipio": "Brasília",
+        "uf": "DF",
+        "matricula": "EXEMPLO-0001",
+        "tipo": "Gleba rural"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-47.93020, -15.74510],
+            [-47.92740, -15.74460],
+            [-47.92580, -15.74640],
+            [-47.92630, -15.74910],
+            [-47.92960, -15.75000],
+            [-47.93200, -15.74820],
+            [-47.93020, -15.74510]
+          ]
+        ]
+      }
+    }
+  ]
+}
