@@ -1,0 +1,25 @@
+name: Sugerir uma melhoria
+description: Proponha uma melhoria para o GeoLume
+title: "[Melhoria] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Explique o problema ou necessidade antes de propor a solução.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema a melhoria resolve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Qual é a proposta?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Existem alternativas consideradas?
