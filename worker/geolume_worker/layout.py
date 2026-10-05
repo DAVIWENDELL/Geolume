@@ -26,6 +26,7 @@ from qgis.core import (
 from qgis.PyQt.QtGui import QFont
 
 from geolume_worker.camadas import alfa8, estilo_por_id
+from geolume_worker.geometry import format_gms, fuso_utm
 from geolume_worker.medida import cortar_para_caber, linhas_que_cabem, medir
 from geolume_worker.prancha import Prancha
 from geolume_worker.processing import ParcelSummary
@@ -44,8 +45,10 @@ LIMITE_INFERIOR = PAGINA[1] - MARGEM
 COLUNA_DIREITA = (218, 287)
 TABELA_X, TABELA_Y = 10, 160
 FAIXA_INFERIOR = (117, 210, 153, 205)  # x0, x1, y0, y1: abaixo do mapa, à direita da tabela
+QUADRO_X = FAIXA_INFERIOR[0] + 3  # quadro de coordenadas: alinhado com a legenda inferior, preso à base
 _FONTE_TABELA = 7
 _FONTE_PROPRIEDADES = 8
+_FONTE_QUADRO = 7
 
 
 def _formatar(label: QgsLayoutItemLabel, tamanho: float) -> None:
@@ -164,6 +167,24 @@ def _tabela_vertices(layout: QgsPrintLayout, summary: ParcelSummary) -> None:
         _label(layout, aviso, _FONTE_TABELA, TABELA_X, fim + 1)
 
 
+def _quadro_coordenadas(layout: QgsPrintLayout, summary: ParcelSummary) -> None:
+    """SRC completo, centroide em GMS e UTM e a fonte da geometria, na base da faixa inferior."""
+    fuso, hemisferio = fuso_utm(summary.epsg)
+    lon, lat = summary.centroide_geo
+    centro = summary.geometry_utm.centroid().asPoint()
+    texto = "\n".join([
+        f"SRC: SIRGAS 2000 / UTM fuso {fuso} {hemisferio} — EPSG:{summary.epsg}",
+        "Latitude/longitude: SIRGAS 2000 geográficas — EPSG:4674",
+        f"Lat {format_gms(lat, 'lat')}   Long {format_gms(lon, 'lon')}",
+        f"UTM: E {centro.x():.2f} m   N {centro.y():.2f} m",
+        "Coordenadas apresentadas correspondem ao centroide da geometria.",
+        # Só a origem real: o GeoJSON do usuário não é fonte oficial nem cadastral.
+        "Fonte da geometria: GeoJSON fornecido pelo usuário.",
+    ])
+    quadro = _label(layout, texto, _FONTE_QUADRO, QUADRO_X, FAIXA_INFERIOR[2])
+    quadro.attemptMove(QgsLayoutPoint(QUADRO_X, LIMITE_INFERIOR - quadro.sizeWithUnits().height()))
+
+
 def montar_mapa(
     summary: ParcelSummary,
     title: str = TITULO_PADRAO,
@@ -245,6 +266,7 @@ def montar_mapa(
 
     _label(layout, "Tabela de vértices", 9, 10, 153)
     _tabela_vertices(layout, summary)
+    _quadro_coordenadas(layout, summary)
     if prancha.legenda == "lateral":
         _legenda(layout, prancha, COLUNA_DIREITA[0], escala.positionWithUnits().y() + escala.sizeWithUnits().height() + 5)
     elif prancha.legenda == "inferior":

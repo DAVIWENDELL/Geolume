@@ -15,6 +15,7 @@
 - 2026-10-01 — Alfa do preenchimento: `alfa8 = floor(alfa × 255 + 0,5)` (metade para cima) no Python e no JavaScript. O `round()` do Python foi rejeitado porque arredonda ao par e faria tela e PDF divergirem em 30 % e 70 %. Alfa inválido é recusado, nunca corrigido.
 - 2026-10-01 — Jobs antigos sem `estilo`/`alfa_preenchimento` valem `padrao`/0.35, sem migração de banco.
 - 2026-10-01 — O frontend não tem mais lista local de mapas-base nem fallback de catálogo: sem catálogo válido, `withBase` não troca o mapa-base e a legenda mostra "Mapa-base: nenhum". O polígono muda só por `mapView.setStyle` (prancha completa). Não reintroduzir lista fixa no navegador.
+- 2026-10-05 — Quadro de coordenadas do `mapa.pdf`: o ponto de referência é o centroide calculado no plano UTM e levado a SIRGAS 2000 geográficas (EPSG:4674), para que GMS e E/N mostrem o mesmo ponto. GMS com segundos em centésimos arredondados metade para cima sobre inteiros (59,995" sobe o minuto; nunca 60"), hemisférios S/N e L/O, separador decimal ponto como o resto do PDF. A fonte é declarada só como "GeoJSON fornecido pelo usuário", nunca como dado oficial ou cadastral. `centroide_geo` existe só em `ParcelSummary`; `resultado.json` não mudou.
 
 ## Fatos verificados no repositório
 

@@ -16,6 +16,7 @@ class ParcelSummary:
     vertices: list[Vertex]
     geometry_utm: QgsGeometry
     properties: dict[str, object]
+    centroide_geo: tuple[float, float]  # (lon, lat) em SIRGAS 2000 geográficas, EPSG:4674
 
 
 def process(loaded: LoadedInput) -> ParcelSummary:
@@ -29,6 +30,13 @@ def process(loaded: LoadedInput) -> ParcelSummary:
         QgsProject.instance().transformContext(),
     )
     geometry_utm.transform(transform)
+    # Centroide calculado no plano UTM e levado ao geográfico: o mesmo ponto do E/N mostrado no mapa.
+    para_geo = QgsCoordinateTransform(
+        QgsCoordinateReferenceSystem(f"EPSG:{epsg}"),
+        QgsCoordinateReferenceSystem("EPSG:4674"),
+        QgsProject.instance().transformContext(),
+    )
+    centroide = para_geo.transform(geometry_utm.centroid().asPoint())
 
     anel = [(p.x(), p.y()) for p in geometry_utm.asPolygon()[0]]
     return ParcelSummary(
@@ -38,4 +46,5 @@ def process(loaded: LoadedInput) -> ParcelSummary:
         vertices=vertex_table(anel),
         geometry_utm=geometry_utm,
         properties=loaded.properties,
+        centroide_geo=(centroide.x(), centroide.y()),
     )

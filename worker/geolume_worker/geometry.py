@@ -33,6 +33,32 @@ def format_dms(deg: float) -> str:
     return f"{graus}°{minutos:02d}'{segundos:02d}\""
 
 
+_HEMISFERIOS = {"lat": ("S", "N"), "lon": ("O", "L")}
+
+
+def format_gms(valor: float, eixo: str) -> str:
+    """Latitude ("lat") ou longitude ("lon") em GMS com hemisfério S/N ou O/L; segundos com 2 casas."""
+    if eixo not in _HEMISFERIOS:
+        raise ValueError(f"eixo inválido: {eixo}")
+    # Arredonda em centésimos de segundo inteiros (metade para cima): 59,995" vira o minuto seguinte, nunca 60".
+    # O round(…, 6) tira o ruído do float antes do floor.
+    centesimos = math.floor(round(abs(valor) * 360_000, 6) + 0.5)
+    graus, resto = divmod(centesimos, 360_000)
+    minutos, resto = divmod(resto, 6_000)
+    segundos, fracao = divmod(resto, 100)
+    hemisferio = _HEMISFERIOS[eixo][0 if valor < 0 and centesimos else 1]  # zero arredondado é N/L
+    return f"{graus}°{minutos:02d}'{segundos:02d}.{fracao:02d}\" {hemisferio}"
+
+
+def fuso_utm(epsg: int) -> tuple[int, str]:
+    """Fuso e hemisfério de um EPSG SIRGAS 2000 / UTM suportado (inverso de utm_epsg_for)."""
+    if epsg - 31960 in _FUSOS_SUL:
+        return epsg - 31960, "Sul"
+    if epsg - 31955 in _FUSOS_NORTE:
+        return epsg - 31955, "Norte"
+    raise ValueError(f"EPSG fora dos fusos SIRGAS 2000 / UTM suportados: {epsg}")
+
+
 @dataclass(frozen=True)
 class Vertex:
     id: str

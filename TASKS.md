@@ -16,6 +16,7 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 - [x] Tela principal reorganizada para o fluxo de cliente: arquivo e configuração à esquerda, mapa e resultado à direita, histórico compacto abaixo; desktop e mobile verificados pelo Playwright.
 - [x] Botão Processar mantido alcançável com a prancha aberta, removendo o sticky da coluna de fluxo e cobrindo o comportamento com E2E.
 - [x] Varredura final de UX da tela principal (2026-10-01): amostra da legenda segue o estilo do polígono, alvos de 44 px em tablet e celular, histórico mobile sem links no cartão e falha sem código interno; cobertos por unitário e E2E.
+- [x] Quadro de coordenadas e fontes no `mapa.pdf` (2026-10-05, 1ª fatia do layout profissional): SRC completo com fuso/hemisfério e EPSG UTM, EPSG:4674 para latitude/longitude, centroide em GMS (S/N, L/O) e UTM, e "Fonte da geometria: GeoJSON fornecido pelo usuário."; suíte do worker verde, PDFs reais inspecionados, geração em container `--network none`, `memorial.pdf` e `resultado.json` inalterados.
 - [x] Testes unitários, worker, API e Playwright versionados.
 - [x] Proteções de autenticação, autorização, CSRF, limites e arquivos.
 
@@ -26,6 +27,8 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 - [ ] Validar arquivos reais maiores e variados sem colocá-los no Git.
 - [ ] Definir critérios mensuráveis para tempo de processamento e concorrência.
 - [ ] Decidir se KML e Shapefile entram no MVP ou em uma etapa posterior.
+- [ ] Layout profissional do `mapa.pdf`, uma fatia por vez: escala numérica, grade de coordenadas GMS na moldura, rosa dos ventos configurável (muda `Prancha`/API/frontend — exige coordenação), moldura e selo.
+- [?] Mapa complementar de localização: bloqueado até existir contrato de dados local e licenciado (ex.: malha de UFs do IBGE versionada, com atribuição). Não desenhar mapa sem fonte.
 
 ## Próxima prioridade — experiência
 
