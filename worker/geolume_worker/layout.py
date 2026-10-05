@@ -45,10 +45,11 @@ LIMITE_INFERIOR = PAGINA[1] - MARGEM
 COLUNA_DIREITA = (218, 287)
 TABELA_X, TABELA_Y = 10, 160
 FAIXA_INFERIOR = (117, 210, 153, 205)  # x0, x1, y0, y1: abaixo do mapa, à direita da tabela
-QUADRO_X = FAIXA_INFERIOR[0] + 3  # quadro de coordenadas: alinhado com a legenda inferior, preso à base
+QUADRO_X = FAIXA_INFERIOR[0] + 3  # quadro de coordenadas: alinhado com a legenda inferior
+QUADRO_BASE = LIMITE_INFERIOR - 3  # folga de 3 mm acima do limite inferior
 _FONTE_TABELA = 7
 _FONTE_PROPRIEDADES = 8
-_FONTE_QUADRO = 7
+_FONTE_QUADRO = 8
 
 
 def _formatar(label: QgsLayoutItemLabel, tamanho: float) -> None:
@@ -177,12 +178,14 @@ def _quadro_coordenadas(layout: QgsPrintLayout, summary: ParcelSummary) -> None:
         "Latitude/longitude: SIRGAS 2000 geográficas — EPSG:4674",
         f"Lat {format_gms(lat, 'lat')}   Long {format_gms(lon, 'lon')}",
         f"UTM: E {centro.x():.2f} m   N {centro.y():.2f} m",
-        "Coordenadas apresentadas correspondem ao centroide da geometria.",
+        # Quebrada em duas linhas: inteira, em 8 pt, passaria da largura da faixa (x ≤ 210).
+        "Coordenadas apresentadas correspondem",
+        "ao centroide da geometria.",
         # Só a origem real: o GeoJSON do usuário não é fonte oficial nem cadastral.
         "Fonte da geometria: GeoJSON fornecido pelo usuário.",
     ])
     quadro = _label(layout, texto, _FONTE_QUADRO, QUADRO_X, FAIXA_INFERIOR[2])
-    quadro.attemptMove(QgsLayoutPoint(QUADRO_X, LIMITE_INFERIOR - quadro.sizeWithUnits().height()))
+    quadro.attemptMove(QgsLayoutPoint(QUADRO_X, QUADRO_BASE - quadro.sizeWithUnits().height()))
 
 
 def montar_mapa(
