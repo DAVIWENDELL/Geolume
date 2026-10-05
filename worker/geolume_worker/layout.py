@@ -26,7 +26,7 @@ from qgis.core import (
 from qgis.PyQt.QtGui import QFont
 
 from geolume_worker.camadas import alfa8, estilo_por_id
-from geolume_worker.geometry import format_gms, fuso_utm
+from geolume_worker.geometry import denominador_legivel, format_gms, formatar_escala, fuso_utm
 from geolume_worker.medida import cortar_para_caber, linhas_que_cabem, medir
 from geolume_worker.prancha import Prancha
 from geolume_worker.processing import ParcelSummary
@@ -50,6 +50,7 @@ QUADRO_BASE = LIMITE_INFERIOR - 3  # folga de 3 mm acima do limite inferior
 _FONTE_TABELA = 7
 _FONTE_PROPRIEDADES = 8
 _FONTE_QUADRO = 8
+_FONTE_ESCALA = 9
 
 
 def _formatar(label: QgsLayoutItemLabel, tamanho: float) -> None:
@@ -222,6 +223,8 @@ def montar_mapa(
     extent = summary.geometry_utm.boundingBox()
     extent.scale(1.2)
     mapa.zoomToExtent(extent)
+    # Escala legível aplicada ao próprio mapa: o texto e a barra gráfica mostram a escala real.
+    mapa.setScale(denominador_legivel(mapa.scale()))
     mapa.setFrameEnabled(True)
     layout.addLayoutItem(mapa)
 
@@ -266,6 +269,10 @@ def montar_mapa(
     escala.update()
     escala.attemptMove(QgsLayoutPoint(218, 155))
     layout.addLayoutItem(escala)
+    # Logo acima da barra, no vão entre o resumo (termina em y ≈ 137) e a escala gráfica.
+    numerica = _label(layout, f"Escala numérica: {formatar_escala(round(mapa.scale()))}", _FONTE_ESCALA,
+                      COLUNA_DIREITA[0], 0)
+    numerica.attemptMove(QgsLayoutPoint(COLUNA_DIREITA[0], 153 - numerica.sizeWithUnits().height()))
 
     _label(layout, "Tabela de vértices", 9, 10, 153)
     _tabela_vertices(layout, summary)

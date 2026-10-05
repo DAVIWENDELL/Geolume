@@ -24,7 +24,7 @@ GeoLume — Mapa de Localização
 
 
 
-
+                                                                                                                                Escala numérica: 1:5.800
 Tabela de vértices
                                                                                                                                 0         80          160   240         320 m
 Vértice   E (m)     N (m)    Azimute    Dist. (m)

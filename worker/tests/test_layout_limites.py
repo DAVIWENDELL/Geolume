@@ -213,6 +213,7 @@ def _grupos(layout, logo):
         "resumo": com("SIRGAS"),
         "coordenadas": com("SRC:"),
         "escala": _uniao(_caixa(e) for e in _itens(layout, QgsLayoutItemScaleBar)),
+        "escala_numerica": com("Escala numérica"),
         "tabela": com("Tabela de vértices", "Vértice ", "Exibidos"),
         "legenda": _uniao([_caixa(r) for r in rotulos if r.currentText() in ("Legenda", "Limite do imóvel")]
                           + [_caixa(s) for s in _itens(layout, QgsLayoutItemShape)]),
@@ -270,7 +271,8 @@ def test_matriz_sem_sobreposicao(qgis_app, tmp_path, indice):
 
     projeto, layout = montar_mapa(summary, prancha=prancha, logo=logo)
     grupos = _grupos(layout, logo)
-    assert {"cabecalho", "norte", "mapa", "propriedades", "resumo", "coordenadas", "escala", "tabela"} <= set(grupos)
+    assert {"cabecalho", "norte", "mapa", "propriedades", "resumo", "coordenadas", "escala", "escala_numerica",
+            "tabela"} <= set(grupos)
     assert ("legenda" in grupos) == (legenda != "nenhuma")
     assert ("logo" in grupos) == com_logo
     for nome, (x0, y0, x1, y1) in grupos.items():

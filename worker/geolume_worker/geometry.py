@@ -59,6 +59,23 @@ def fuso_utm(epsg: int) -> tuple[int, str]:
     raise ValueError(f"EPSG fora dos fusos SIRGAS 2000 / UTM suportados: {epsg}")
 
 
+def denominador_legivel(calculado: float) -> int:
+    """Denominador da escala arredondado para cima com 2 dígitos significativos (173 412 → 180 000).
+
+    Para cima: o mapa só se afasta, e o polígono continua cabendo.
+    """
+    if not math.isfinite(calculado) or calculado <= 0:
+        raise ValueError(f"escala inválida: {calculado}")
+    calculado = max(round(calculado, 6), 1)  # tira o ruído do float antes do ceil
+    passo = 10 ** max(int(math.floor(math.log10(calculado))) - 1, 0)
+    return math.ceil(calculado / passo) * passo
+
+
+def formatar_escala(denominador: int) -> str:
+    """1:180.000 — ponto como separador de milhar."""
+    return f"1:{denominador:,}".replace(",", ".")
+
+
 @dataclass(frozen=True)
 class Vertex:
     id: str

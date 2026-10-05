@@ -109,3 +109,48 @@ def test_fuso_utm(epsg, esperado):
 def test_fuso_utm_fora_da_cobertura():
     with pytest.raises(ValueError):
         fuso_utm(4674)
+
+
+# ---- Escala numérica ------------------------------------------------------------
+
+from geolume_worker.geometry import denominador_legivel, formatar_escala  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "calculado, legivel",
+    [
+        (173_412.7, 180_000),
+        (180_000, 180_000),
+        (180_000.0000001, 180_000),  # ruído de float não sobe o degrau
+        (179_999.9999999, 180_000),
+        (1_000, 1_000),
+        (999.2, 1_000),
+        (24_100, 25_000),
+        (1_234_567, 1_300_000),
+        (37.2, 38),
+        (9.1, 10),
+        (1, 1),
+        (0.4, 1),
+    ],
+)
+def test_denominador_legivel_arredonda_para_cima_com_dois_digitos(calculado, legivel):
+    assert denominador_legivel(calculado) == legivel
+
+
+def test_denominador_legivel_nunca_menor_que_o_calculado():
+    for calculado in (12.3, 99.9, 101, 4_321, 98_765, 2_500_001):
+        assert denominador_legivel(calculado) >= calculado
+
+
+@pytest.mark.parametrize("invalido", [0, -5, float("nan"), float("inf")])
+def test_denominador_legivel_invalido(invalido):
+    with pytest.raises(ValueError):
+        denominador_legivel(invalido)
+
+
+@pytest.mark.parametrize(
+    "denominador, texto",
+    [(50, "1:50"), (1_000, "1:1.000"), (25_000, "1:25.000"), (180_000, "1:180.000"), (1_300_000, "1:1.300.000")],
+)
+def test_formatar_escala_com_ponto_de_milhar(denominador, texto):
+    assert formatar_escala(denominador) == texto
