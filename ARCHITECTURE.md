@@ -92,4 +92,6 @@ A API publica somente `127.0.0.1:8000` no Compose de desenvolvimento. `/health` 
 
 ## Limitações atuais
 
-O fluxo é orientado a um polígono GeoJSON. KML/Shapefile, dados de clientes, autenticação expandida, concorrência maior e produção são etapas posteriores, não devem ser presumidos como implementados.
+O fluxo é orientado a um polígono GeoJSON. KML/Shapefile, dados de clientes, autenticação expandida, concorrência maior, APIs comerciais de mapas/satélite e produção são etapas posteriores, não devem ser presumidos como implementados.
+
+O MVP atual deve continuar sem dependência de APIs comerciais que gerem cobrança. OSM pode ser usado apenas dentro da política aplicável para pré-visualização; o `mapa.pdf` deve continuar gerado sem depender de rede ou de imagens externas não licenciadas. A integração de satélite, mapas comerciais e fontes oficiais remotas deve ser planejada depois de apoio/financiamento e de uma decisão documentada sobre licença, custo, cache e uso comercial.

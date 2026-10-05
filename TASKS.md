@@ -21,11 +21,13 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 
 ## Próxima prioridade — produto
 
-- [ ] Demonstrar o fluxo atual a um usuário real e registrar feedback sobre entrada, mapa e PDFs.
+- [ ] Finalizar o MVP demonstrável sem custos de APIs comerciais.
+- [ ] Implementar e validar o layout profissional real do `mapa.pdf` no backend/QGIS.
+- [ ] Demonstrar o fluxo atual a apoiadores e possíveis parceiros, deixando clara a diferença entre MVP implementado e visão futura.
 - [ ] Confirmar requisitos profissionais do memorial antes de chamá-lo de documento final.
-- [ ] Validar arquivos reais maiores e variados sem colocá-los no Git.
+- [ ] Validar arquivos fictícios maiores e variados sem colocá-los no Git.
 - [ ] Definir critérios mensuráveis para tempo de processamento e concorrência.
-- [ ] Decidir se KML e Shapefile entram no MVP ou em uma etapa posterior.
+- [ ] Registrar como pós-financiamento a decisão sobre KML, Shapefile, satélite e provedores de mapas.
 
 ## Próxima prioridade — experiência
 

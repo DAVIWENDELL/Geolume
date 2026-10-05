@@ -15,6 +15,7 @@
 - 2026-10-01 — Alfa do preenchimento: `alfa8 = floor(alfa × 255 + 0,5)` (metade para cima) no Python e no JavaScript. O `round()` do Python foi rejeitado porque arredonda ao par e faria tela e PDF divergirem em 30 % e 70 %. Alfa inválido é recusado, nunca corrigido.
 - 2026-10-01 — Jobs antigos sem `estilo`/`alfa_preenchimento` valem `padrao`/0.35, sem migração de banco.
 - 2026-10-01 — O frontend não tem mais lista local de mapas-base nem fallback de catálogo: sem catálogo válido, `withBase` não troca o mapa-base e a legenda mostra "Mapa-base: nenhum". O polígono muda só por `mapView.setStyle` (prancha completa). Não reintroduzir lista fixa no navegador.
+- 2026-10-03 — Estratégia financeira e de produto: finalizar primeiro um MVP demonstrável sem criar custos de APIs pagas, usando dados fictícios, GeoJSON, QGIS headless e pré-visualização controlada. APIs de satélite/mapas comerciais, formatos adicionais, cobrança, revisão paga e editor completo ficam para depois de obter apoio, parceria ou financiamento. Motivo: o cliente não pode financiar o desenvolvimento neste momento; o sistema inicial será demonstrado a possíveis apoiadores como prova da ideia.
 
 ## Fatos verificados no repositório
 
