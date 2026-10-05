@@ -138,9 +138,62 @@ def test_escala_numerica_junto_da_barra_sem_sobrepor(qgis_app, fixtures_dir, tmp
         assert sobrepostas == []
 
 
-@pytest.mark.xfail(strict=True, reason="Defeito anterior a esta fatia (já no HEAD f717eb4): em áreas muito grandes "
-                                       "a escala gráfica rotula em metros ('30,000 60,000 …') e os rótulos se tocam. "
-                                       "Correção (ex.: km) altera a escala gráfica — fora do escopo, aguarda decisão.")
 def test_barra_grafica_de_area_grande_sem_rotulos_sobrepostos(qgis_app, fixtures_dir, tmp_path):
     pdf = export_map_pdf(_summary(fixtures_dir, tmp_path, "grande"), tmp_path / "m.pdf")
     assert pdf_verif.sobrepostas(pdf) == []
+    assert [p.texto for p in _rotulos_da_barra(pdf)][-1] == "km"
+
+
+# ---- Escala gráfica: metros ou quilômetros, rótulos separados e legíveis --------
+
+# Lado do quadrado em graus: de ~55 m (1:540) a ~220 km (1:2.200.000), passando pelas faixas em que
+# os rótulos em metros se fundiam ("1,2001,600" em 1:32.000) ou se sobrepunham.
+LADOS = [0.0005, 0.002, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12, 0.3, 0.8, 2.0]
+
+
+def _quadrado(destino, lado):
+    x0, y0 = -45.0 - lado / 2, -15.0 - lado / 2  # fuso 23S
+    anel = [[x0, y0], [x0 + lado, y0], [x0 + lado, y0 + lado], [x0, y0 + lado], [x0, y0]]
+    destino.write_text(json.dumps({"type": "FeatureCollection", "features": [{
+        "type": "Feature", "properties": {},
+        "geometry": {"type": "Polygon", "coordinates": [anel]}}]}), encoding="utf-8")
+    return destino
+
+
+def _rotulos_da_barra(pdf):
+    """Palavras da faixa de rótulos da barra (coluna direita, logo abaixo da escala numérica)."""
+    return [p for p in pdf_verif.palavras(pdf)
+            if p.x0 >= 216 * pdf_verif.MM and 154 * pdf_verif.MM <= p.y0 <= 162 * pdf_verif.MM]
+
+
+def _numero_pt(valor):
+    """Número como o leitor brasileiro espera: vírgula decimal, ponto de milhar, sem zeros à direita."""
+    texto = f"{round(valor, 6):,.6f}".rstrip("0").rstrip(".")
+    return texto.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+@pytest.mark.parametrize("lado", LADOS)
+def test_barra_grafica_em_metros_ou_km_com_rotulos_separados(qgis_app, tmp_path, lado):
+    summary = process(load_input(_quadrado(tmp_path / "q.geojson", lado)))
+    projeto, layout = montar_mapa(summary)
+    [mapa] = _itens(layout, QgsLayoutItemMap)
+    [barra] = _itens(layout, QgsLayoutItemScaleBar)
+    assert barra.linkedMap() is mapa
+    segmento, unidade, segmentos = barra.unitsPerSegment(), barra.unitLabel(), barra.numberOfSegments()
+    total_m = segmento * segmentos * (1000 if unidade == "km" else 1)
+    # Metros enquanto nenhum rótulo chega a 4 dígitos; a partir de 1 000 m, quilômetros.
+    assert unidade == ("km" if total_m >= 1000 else "m"), (unidade, total_m)
+    esperados = [_numero_pt(segmento * i) for i in range(segmentos + 1)] + [unidade]
+    denominador = round(mapa.scale())
+    del layout, projeto
+
+    pdf = export_map_pdf(summary, tmp_path / "m.pdf")
+    rotulos = _rotulos_da_barra(pdf)
+    # Cada rótulo é uma palavra própria: rótulos encostados viram uma palavra só no PDF.
+    assert [p.texto for p in rotulos] == esperados
+    assert pdf_verif.sobrepostas(pdf) == []
+    assert pdf_verif.fora_da_margem(pdf, MARGEM_PT) == []
+    # A barra mede o que diz: distância entre os rótulos "0" e o último, no papel, vezes a escala.
+    centro = [(p.x0 + p.x1) / 2 for p in rotulos[:segmentos + 1]]
+    no_papel_mm = (centro[-1] - centro[0]) / pdf_verif.MM
+    assert no_papel_mm * denominador / 1000 == pytest.approx(total_m, rel=0.02)

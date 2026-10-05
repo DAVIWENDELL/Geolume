@@ -4,6 +4,7 @@ from pathlib import Path
 
 from qgis.core import (
     Qgis,
+    QgsBasicNumericFormat,
     QgsFeature,
     QgsFillSymbol,
     QgsLayoutExporter,
@@ -81,6 +82,16 @@ def _label_ajustado(
     if label.sizeWithUnits().width() > _CABECALHO_LARGURA:
         label.attemptResize(QgsLayoutSize(_CABECALHO_LARGURA, altura_max))
     return label
+
+
+def _formato_numerico_pt() -> QgsBasicNumericFormat:
+    """Rótulos da escala gráfica em português: vírgula decimal e ponto de milhar."""
+    formato = QgsBasicNumericFormat()
+    formato.setDecimalSeparator(",")
+    formato.setThousandsSeparator(".")
+    formato.setShowThousandsSeparator(True)
+    formato.setShowTrailingZeros(False)
+    return formato
 
 
 def _simbolo(prancha: Prancha) -> QgsFillSymbol:
@@ -260,13 +271,19 @@ def montar_mapa(
     escala.setStyle("Single Box")
     escala.setLinkedMap(mapa)
     escala.applyDefaultSize()
-    # FitWidth depois do tamanho padrão: mantém a barra legível de lotes de 1 m² a 100 000 ha.
+    # FitWidth depois do tamanho padrão: segmentos com valores redondos e barra entre 30 e 60 mm.
     escala.setNumberOfSegments(4)
     escala.setNumberOfSegmentsLeft(0)
     escala.setSegmentSizeMode(Qgis.ScaleBarSegmentSizeMode.FitWidth)
     escala.setMinimumBarWidth(30)
     escala.setMaximumBarWidth(60)
+    escala.setNumericFormat(_formato_numerico_pt())
     escala.update()
+    # Em metros, rótulos de 4+ dígitos se fundem ("1.2001.600" em 1:32.000): a partir de 1 000 m de barra, km.
+    if escala.unitsPerSegment() * escala.numberOfSegments() >= 1000:
+        escala.setUnits(Qgis.DistanceUnit.Kilometers)
+        escala.setUnitLabel("km")
+        escala.update()
     escala.attemptMove(QgsLayoutPoint(218, 155))
     layout.addLayoutItem(escala)
     # Logo acima da barra, no vão entre o resumo (termina em y ≈ 137) e a escala gráfica.
