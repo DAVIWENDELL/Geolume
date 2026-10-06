@@ -27,7 +27,7 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 - [ ] Validar arquivos reais maiores e variados sem colocá-los no Git.
 - [ ] Definir critérios mensuráveis para tempo de processamento e concorrência.
 - [ ] Decidir se KML e Shapefile entram no MVP ou em uma etapa posterior.
-- [ ] Layout profissional do `mapa.pdf`, uma fatia por vez: escala numérica, grade de coordenadas GMS na moldura, rosa dos ventos configurável (muda `Prancha`/API/frontend — exige coordenação), moldura e selo.
+- [ ] Layout profissional do `mapa.pdf`, uma fatia por vez: escala numérica, grade de coordenadas GMS na moldura, rosa dos ventos configurável (muda `Prancha`/API/frontend — exige coordenação), moldura e marca de autoria "Gerado pelo GeoLume" (feita em 2026-10-06; não é selo técnico — ver `PROJECT_MEMORY.md`).
 - [?] Mapa complementar de localização: bloqueado até existir contrato de dados local e licenciado (ex.: malha de UFs do IBGE versionada, com atribuição). Não desenhar mapa sem fonte.
 
 ## Próxima prioridade — experiência
