@@ -36,18 +36,36 @@ def format_dms(deg: float) -> str:
 _HEMISFERIOS = {"lat": ("S", "N"), "lon": ("O", "L")}
 
 
-def format_gms(valor: float, eixo: str) -> str:
-    """Latitude ("lat") ou longitude ("lon") em GMS com hemisfério S/N ou O/L; segundos com 2 casas."""
+def format_gms(valor: float, eixo: str, casas: int = 2) -> str:
+    """Latitude ("lat") ou longitude ("lon") em GMS com hemisfério S/N ou O/L; segundos com `casas` decimais."""
     if eixo not in _HEMISFERIOS:
         raise ValueError(f"eixo inválido: {eixo}")
-    # Arredonda em centésimos de segundo inteiros (metade para cima): 59,995" vira o minuto seguinte, nunca 60".
+    # Arredonda em frações de segundo inteiras (metade para cima): 59,995" vira o minuto seguinte, nunca 60".
     # O round(…, 6) tira o ruído do float antes do floor.
-    centesimos = math.floor(round(abs(valor) * 360_000, 6) + 0.5)
-    graus, resto = divmod(centesimos, 360_000)
-    minutos, resto = divmod(resto, 6_000)
-    segundos, fracao = divmod(resto, 100)
-    hemisferio = _HEMISFERIOS[eixo][0 if valor < 0 and centesimos else 1]  # zero arredondado é N/L
-    return f"{graus}°{minutos:02d}'{segundos:02d}.{fracao:02d}\" {hemisferio}"
+    por_segundo = 10 ** casas
+    unidades = math.floor(round(abs(valor) * 3600 * por_segundo, 6) + 0.5)
+    graus, resto = divmod(unidades, 3600 * por_segundo)
+    minutos, resto = divmod(resto, 60 * por_segundo)
+    segundos, fracao = divmod(resto, por_segundo)
+    hemisferio = _HEMISFERIOS[eixo][0 if valor < 0 and unidades else 1]  # zero arredondado é N/L
+    decimais = f".{fracao:0{casas}d}" if casas else ""
+    return f"{graus}°{minutos:02d}'{segundos:02d}{decimais}\" {hemisferio}"
+
+
+# Intervalos "redondos" da grade de coordenadas, em segundos: de 0,01" a 10°.
+INTERVALOS_GRADE_S = (0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
+                      7200, 18000, 36000)
+
+
+def intervalo_grade(extensao_graus: float, max_intervalos: int = 6) -> float:
+    """Menor intervalo redondo (em graus) que divide a extensão em no máximo `max_intervalos` partes."""
+    if not math.isfinite(extensao_graus) or extensao_graus <= 0:
+        raise ValueError(f"extensão inválida: {extensao_graus}")
+    extensao_s = extensao_graus * 3600
+    for intervalo in INTERVALOS_GRADE_S:
+        if extensao_s / intervalo <= max_intervalos:
+            return intervalo / 3600
+    return INTERVALOS_GRADE_S[-1] / 3600
 
 
 def fuso_utm(epsg: int) -> tuple[int, str]:

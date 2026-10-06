@@ -154,3 +154,54 @@ def test_denominador_legivel_invalido(invalido):
 )
 def test_formatar_escala_com_ponto_de_milhar(denominador, texto):
     assert formatar_escala(denominador) == texto
+
+
+# ---- Grade de coordenadas: GMS com casas variáveis e intervalo cartográfico ------
+
+from geolume_worker.geometry import INTERVALOS_GRADE_S, intervalo_grade  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "valor, eixo, casas, texto",
+    [
+        (-15.75, "lat", 0, "15°45'00\" S"),
+        (-47.925, "lon", 0, "47°55'30\" O"),
+        (2.8, "lat", 1, "2°48'00.0\" N"),
+        (-(15 + 44 / 60 + 59.6 / 3600), "lat", 0, "15°45'00\" S"),  # 59,6" sobe o minuto; nunca 60"
+        (-(15 + 59 / 60 + 59.96 / 3600), "lat", 1, "16°00'00.0\" S"),
+        (-(15 + 47 / 60 + 59.995 / 3600), "lat", 2, "15°48'00.00\" S"),
+    ],
+)
+def test_format_gms_com_casas(valor, eixo, casas, texto):
+    assert format_gms(valor, eixo, casas) == texto
+
+
+def test_format_gms_padrao_continua_com_duas_casas():
+    assert format_gms(-47.5, "lon") == format_gms(-47.5, "lon", 2) == "47°30'00.00\" O"
+
+
+@pytest.mark.parametrize(
+    "extensao_s, intervalo_s",
+    [
+        (0.08, 0.02),  # lote de ~2 m: centésimos de segundo
+        (25, 5),  # gleba de ~700 m
+        (31, 10),
+        (300, 60),  # ~10 km: 1'
+        (7920, 1800),  # ~2,2°: 30'
+    ],
+)
+def test_intervalo_grade(extensao_s, intervalo_s):
+    assert intervalo_grade(extensao_s / 3600) * 3600 == pytest.approx(intervalo_s)
+
+
+def test_intervalo_grade_da_entre_2_e_6_intervalos():
+    for extensao_s in (0.05, 0.3, 1.7, 12, 59, 420, 2_000, 9_000, 40_000):
+        intervalo = intervalo_grade(extensao_s / 3600) * 3600
+        assert intervalo in INTERVALOS_GRADE_S
+        assert 2 <= extensao_s / intervalo <= 6 or intervalo == INTERVALOS_GRADE_S[0], (extensao_s, intervalo)
+
+
+@pytest.mark.parametrize("invalido", [0, -1, float("nan")])
+def test_intervalo_grade_invalido(invalido):
+    with pytest.raises(ValueError):
+        intervalo_grade(invalido)

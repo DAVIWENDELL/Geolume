@@ -1,16 +1,21 @@
 """Layout de impressão A4 paisagem exportado para PDF."""
 
+import math
 from pathlib import Path
 
 from qgis.core import (
     Qgis,
     QgsBasicNumericFormat,
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
+    QgsExpression,
     QgsFeature,
     QgsFillSymbol,
     QgsLayoutExporter,
     QgsLayoutItem,
     QgsLayoutItemLabel,
     QgsLayoutItemMap,
+    QgsLayoutItemMapGrid,
     QgsLayoutItemPage,
     QgsLayoutItemPicture,
     QgsLayoutItemScaleBar,
@@ -18,16 +23,17 @@ from qgis.core import (
     QgsLayoutPoint,
     QgsLayoutSize,
     QgsPathResolver,
+    QgsPointXY,
     QgsPrintLayout,
     QgsProject,
     QgsSymbolLayerUtils,
     QgsTextFormat,
     QgsVectorLayer,
 )
-from qgis.PyQt.QtGui import QFont
+from qgis.PyQt.QtGui import QColor, QFont
 
 from geolume_worker.camadas import alfa8, estilo_por_id
-from geolume_worker.geometry import denominador_legivel, format_gms, formatar_escala, fuso_utm
+from geolume_worker.geometry import denominador_legivel, format_gms, formatar_escala, fuso_utm, intervalo_grade
 from geolume_worker.medida import cortar_para_caber, linhas_que_cabem, medir
 from geolume_worker.prancha import Prancha
 from geolume_worker.processing import ParcelSummary
@@ -52,6 +58,9 @@ _FONTE_TABELA = 7
 _FONTE_PROPRIEDADES = 8
 _FONTE_QUADRO = 8
 _FONTE_ESCALA = 9
+_FONTE_GRADE = 7
+# Mapa: 3 mm mais baixo que a faixa até y = 150 para os rótulos da grade caberem antes de "Tabela de vértices".
+MAPA_X, MAPA_Y, MAPA_LARGURA, MAPA_ALTURA = 10, 25, 200, 122
 
 
 def _formatar(label: QgsLayoutItemLabel, tamanho: float) -> None:
@@ -200,6 +209,93 @@ def _quadro_coordenadas(layout: QgsPrintLayout, summary: ParcelSummary) -> None:
     quadro.attemptMove(QgsLayoutPoint(QUADRO_X, QUADRO_BASE - quadro.sizeWithUnits().height()))
 
 
+def _rotulos_grade(layout: QgsPrintLayout, mapa: QgsLayoutItemMap, intervalo: float) -> list[tuple[str, float, str]]:
+    """(eixo da grade, valor em graus, texto GMS) das linhas que cruzam a moldura com o rótulo inteiro dentro dela.
+
+    Longitude no lado inferior, latitude no esquerdo; rótulo que passaria do canto é omitido (a cruzeta fica).
+    """
+    geo = QgsCoordinateReferenceSystem("EPSG:4674")
+    contexto = QgsProject.instance().transformContext()
+    para_geo = QgsCoordinateTransform(mapa.crs(), geo, contexto)
+    para_mapa = QgsCoordinateTransform(geo, mapa.crs(), contexto)
+    e = mapa.extent()
+    cantos = [para_geo.transform(QgsPointXY(x, y)) for x in (e.xMinimum(), e.xMaximum())
+              for y in (e.yMinimum(), e.yMaximum())]
+    lat_inferior = para_geo.transform(QgsPointXY(e.center().x(), e.yMinimum())).y()
+    lon_esquerda = para_geo.transform(QgsPointXY(e.xMinimum(), e.center().y())).x()
+    passo_s = intervalo * 3600
+    casas = 0 if passo_s >= 1 else 1 if passo_s >= 0.1 else 2
+    rotulos = []
+    for eixo, valores in (("lon", [c.x() for c in cantos]), ("lat", [c.y() for c in cantos])):
+        primeiro = math.ceil(min(valores) / intervalo - 1e-9)
+        ultimo = math.floor(max(valores) / intervalo + 1e-9)
+        for k in range(primeiro, ultimo + 1):
+            valor = k * passo_s / 3600  # múltiplo exato do intervalo, sem acumular erro
+            texto = format_gms(valor, eixo, casas)
+            if eixo == "lon":
+                ponto = para_mapa.transform(QgsPointXY(valor, lat_inferior))
+                posicao, lado = (ponto.x() - e.xMinimum()) / e.width() * MAPA_LARGURA, MAPA_LARGURA
+            else:
+                ponto = para_mapa.transform(QgsPointXY(lon_esquerda, valor))
+                posicao, lado = (ponto.y() - e.yMinimum()) / e.height() * MAPA_ALTURA, MAPA_ALTURA
+            meio = medir(layout, texto, _FONTE_GRADE)[0] / 2 + 1
+            if meio <= posicao <= lado - meio:
+                rotulos.append(("x" if eixo == "lon" else "y", valor, texto))
+    return rotulos
+
+
+def _grade_gms(layout: QgsPrintLayout, mapa: QgsLayoutItemMap) -> None:
+    """Grade geográfica SIRGAS 2000 (EPSG:4674) sobre o mapa em UTM: cruzetas discretas e rótulos GMS na moldura.
+
+    Os formatos GMS nativos do QGIS usam E/W; os rótulos vêm de format_gms (L/O) por uma expressão gerada aqui,
+    só com textos calculados — nada do usuário entra nela.
+    """
+    e = mapa.extent()
+    para_geo = QgsCoordinateTransform(mapa.crs(), QgsCoordinateReferenceSystem("EPSG:4674"),
+                                      QgsProject.instance().transformContext())
+    cantos = [para_geo.transform(QgsPointXY(x, y)) for x in (e.xMinimum(), e.xMaximum())
+              for y in (e.yMinimum(), e.yMaximum())]
+    extensao = max(max(c.x() for c in cantos) - min(c.x() for c in cantos),
+                   max(c.y() for c in cantos) - min(c.y() for c in cantos))
+    intervalo = intervalo_grade(extensao)
+    casos = " ".join(
+        f"WHEN @grid_axis = '{eixo}' AND abs(@grid_number - ({valor!r})) < {intervalo / 1000!r} "
+        f"THEN {QgsExpression.quotedString(texto)}"
+        for eixo, valor, texto in _rotulos_grade(layout, mapa, intervalo)
+    )
+
+    grade = QgsLayoutItemMapGrid("Coordenadas geográficas", mapa)
+    grade.setCrs(QgsCoordinateReferenceSystem("EPSG:4674"))
+    grade.setIntervalX(intervalo)
+    grade.setIntervalY(intervalo)
+    grade.setStyle(QgsLayoutItemMapGrid.GridStyle.Cross)
+    grade.setCrossLength(1.5)
+    grade.setGridLineWidth(0.15)
+    grade.setGridLineColor(QColor(90, 90, 90))
+    # Marcas curtas por dentro da moldura indicam onde cada linha da grade chega à borda.
+    grade.setFrameStyle(QgsLayoutItemMapGrid.FrameStyle.InteriorTicks)
+    grade.setFrameWidth(1.5)
+    grade.setFramePenSize(0.15)
+    grade.setFramePenColor(QColor(90, 90, 90))
+    grade.setAnnotationEnabled(True)
+    grade.setAnnotationFormat(QgsLayoutItemMapGrid.AnnotationFormat.CustomFormat)
+    grade.setAnnotationExpression(f"CASE {casos} ELSE '' END" if casos else "''")
+    formato = QgsTextFormat()
+    formato.setFont(QFont("DejaVu Sans"))
+    formato.setSize(_FONTE_GRADE)
+    grade.setAnnotationTextFormat(formato)
+    grade.setAnnotationFrameDistance(1)
+    lado, modo = QgsLayoutItemMapGrid.BorderSide, QgsLayoutItemMapGrid.DisplayMode
+    for borda, exibir in ((lado.Left, modo.LatitudeOnly), (lado.Bottom, modo.LongitudeOnly),
+                          (lado.Top, modo.HideAll), (lado.Right, modo.HideAll)):
+        grade.setAnnotationDisplay(exibir, borda)
+        grade.setAnnotationPosition(QgsLayoutItemMapGrid.AnnotationPosition.OutsideMapFrame, borda)
+    grade.setAnnotationDirection(QgsLayoutItemMapGrid.AnnotationDirection.Vertical, lado.Left)
+    grade.setAnnotationDirection(QgsLayoutItemMapGrid.AnnotationDirection.Horizontal, lado.Bottom)
+    mapa.grids().addGrid(grade)
+    mapa.updateBoundingRect()
+
+
 def montar_mapa(
     summary: ParcelSummary,
     title: str = TITULO_PADRAO,
@@ -227,8 +323,8 @@ def montar_mapa(
     layout.pageCollection().page(0).setPageSize("A4", QgsLayoutItemPage.Orientation.Landscape)
 
     mapa = QgsLayoutItemMap(layout)
-    mapa.attemptMove(QgsLayoutPoint(10, 25))
-    mapa.attemptResize(QgsLayoutSize(200, 125))
+    mapa.attemptMove(QgsLayoutPoint(MAPA_X, MAPA_Y))
+    mapa.attemptResize(QgsLayoutSize(MAPA_LARGURA, MAPA_ALTURA))
     mapa.setCrs(layer.crs())
     mapa.setLayers([layer])
     extent = summary.geometry_utm.boundingBox()
@@ -238,6 +334,7 @@ def montar_mapa(
     mapa.setScale(denominador_legivel(mapa.scale()))
     mapa.setFrameEnabled(True)
     layout.addLayoutItem(mapa)
+    _grade_gms(layout, mapa)
 
     _label_ajustado(layout, title, 18, 10, 8, altura_max=8.5)
     if prancha.responsavel:
