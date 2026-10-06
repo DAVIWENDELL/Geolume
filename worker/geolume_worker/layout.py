@@ -49,6 +49,8 @@ _FONTE_MINIMA = 6
 # Zonas da página (mm). Nada passa da margem de 5 mm: a tabela e o aviso param em LIMITE_INFERIOR.
 MARGEM = 5
 PAGINA = (297, 210)
+# Moldura cartográfica dupla na faixa entre a borda e a margem: (recuo da borda, espessura), em mm.
+_MOLDURAS = (("Moldura externa", 3, 0.5), ("Moldura interna", 4, 0.15))
 LIMITE_INFERIOR = PAGINA[1] - MARGEM
 COLUNA_DIREITA = (218, 287)
 TABELA_X, TABELA_Y = 10, 160
@@ -297,6 +299,24 @@ def _grade_gms(layout: QgsPrintLayout, mapa: QgsLayoutItemMap) -> None:
     mapa.updateBoundingRect()
 
 
+def _moldura_cartografica(layout: QgsPrintLayout) -> None:
+    """Linha externa forte e interna fina em volta da área útil; só contorno, nada fica coberto."""
+    for nome, recuo, espessura in _MOLDURAS:
+        moldura = QgsLayoutItemShape(layout)
+        moldura.setId(nome)
+        moldura.setShapeType(QgsLayoutItemShape.Shape.Rectangle)
+        moldura.setSymbol(QgsFillSymbol.createSimple({
+            "color": "0,0,0,0",
+            "outline_color": "0,0,0,255",
+            "outline_width": str(espessura),
+            "outline_width_unit": "MM",
+            "joinstyle": "miter",
+        }))
+        moldura.attemptMove(QgsLayoutPoint(recuo, recuo))
+        moldura.attemptResize(QgsLayoutSize(PAGINA[0] - 2 * recuo, PAGINA[1] - 2 * recuo))
+        layout.addLayoutItem(moldura)
+
+
 def _rosa_dos_ventos(layout: QgsPrintLayout, mapa: QgsLayoutItemMap) -> None:
     """Rosa dos ventos vinculada ao mapa, com N (negrito), S, L e O em volta.
 
@@ -423,6 +443,7 @@ def montar_mapa(
     elif prancha.legenda == "inferior":
         # Faixa abaixo do mapa, à direita da tabela (que nunca passa de x = 112).
         _legenda(layout, prancha, FAIXA_INFERIOR[0] + 3, FAIXA_INFERIOR[2] + 2)
+    _moldura_cartografica(layout)
     return project, layout
 
 

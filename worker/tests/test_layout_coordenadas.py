@@ -119,7 +119,8 @@ def test_quadro_na_zona_livre_sem_tocar_tabela_nem_legenda(qgis_app, fixtures_di
     assert ZONA[2] <= quadro[1] and quadro[3] <= BASE_DO_QUADRO, quadro
     outros = [r for r in _rotulos(layout) if r.currentText().startswith(("Tabela", "Vértice", "Exibidos", "Legenda",
                                                                           "Limite"))]
-    outros += [i for i in layout.items() if isinstance(i, (QgsLayoutItemShape, QgsLayoutItemScaleBar, QgsLayoutItemMap))]
+    outros += [i for i in layout.items() if isinstance(i, (QgsLayoutItemShape, QgsLayoutItemScaleBar, QgsLayoutItemMap))
+               and not i.id().startswith("Moldura")]
     assert len(outros) >= 4
     for item in outros:
         assert not _intersectam(quadro, _caixa(item)), (item, quadro)

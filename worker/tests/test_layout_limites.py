@@ -186,7 +186,7 @@ def _logo(tmp_path):
 
 
 def _itens(layout, tipo):
-    return [item for item in layout.items() if isinstance(item, tipo)]
+    return [item for item in layout.items() if isinstance(item, tipo) and not item.id().startswith("Moldura")]
 
 
 def _uniao(caixas):

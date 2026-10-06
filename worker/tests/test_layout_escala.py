@@ -123,7 +123,8 @@ def test_escala_numerica_junto_da_barra_sem_sobrepor(qgis_app, fixtures_dir, tmp
     assert numerica[3] <= barra[1] and barra[1] - numerica[3] <= 5, (numerica, barra)
     outros = [_caixa(r) for r in _rotulos(layout) if r is not _escala_numerica(layout)]
     outros += [_caixa(i) for i in layout.items()
-               if isinstance(i, (QgsLayoutItemScaleBar, QgsLayoutItemShape, QgsLayoutItemMap))]
+               if isinstance(i, (QgsLayoutItemScaleBar, QgsLayoutItemShape, QgsLayoutItemMap))
+               and not i.id().startswith("Moldura")]
     for caixa in outros:
         assert not _intersectam(numerica, caixa), (numerica, caixa)
     del layout, projeto

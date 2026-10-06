@@ -49,7 +49,7 @@ def _summary(fixtures_dir, tmp_path, caso):
 
 
 def _itens(layout, tipo):
-    return [item for item in layout.items() if isinstance(item, tipo)]
+    return [item for item in layout.items() if isinstance(item, tipo) and not item.id().startswith("Moldura")]
 
 
 def _caixa(item):
@@ -155,7 +155,7 @@ def test_rosa_e_cardeais_sem_sobrepor_nada_dentro_da_coluna(qgis_app, fixtures_d
     proprios = {id(rosa), *(id(rotulos[letra]) for letra in CARDEAIS)}
     outros = [(type(i).__name__, _caixa(i)) for i in layout.items()
               if hasattr(i, "positionWithUnits") and id(i) not in proprios
-              and type(i).__name__ != "QgsLayoutItemPage"]
+              and type(i).__name__ != "QgsLayoutItemPage" and not i.id().startswith("Moldura")]
     assert any(nome == "QgsLayoutItemMap" for nome, _ in outros)
     for caixa in conjunto:
         for nome, outra in outros:  # mapa, título, logo, resumo, escalas, legenda, tabela, quadro

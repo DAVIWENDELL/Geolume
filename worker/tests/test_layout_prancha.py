@@ -45,7 +45,7 @@ def _imagens(pdf):
 
 
 def _itens(layout, tipo):
-    return [item for item in layout.items() if isinstance(item, tipo)]
+    return [item for item in layout.items() if isinstance(item, tipo) and not item.id().startswith("Moldura")]
 
 
 def _rotulos(layout):

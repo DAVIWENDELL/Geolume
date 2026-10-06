@@ -193,7 +193,8 @@ def test_grade_sem_sobrepor_nada_nos_tres_layouts(qgis_app, fixtures_dir, tmp_pa
     [mapa] = _itens(layout, QgsLayoutItemMap)
     caixa_mapa = _caixa(mapa)
     outros = [_caixa(i) for i in layout.items()
-              if hasattr(i, "positionWithUnits") and i is not mapa and type(i).__name__ != "QgsLayoutItemPage"]
+              if hasattr(i, "positionWithUnits") and i is not mapa and type(i).__name__ != "QgsLayoutItemPage"
+              and not i.id().startswith("Moldura")]
     assert any(r.currentText().startswith("Escala numérica") for r in _itens(layout, QgsLayoutItemLabel))
     assert len(_itens(layout, QgsLayoutItemScaleBar)) == 1
     del layout, projeto
