@@ -67,8 +67,9 @@ def _pdf_texto(pdf):
 
 
 def _pdf_imagens(pdf):
+    """Imagens raster além da marca do GeoLume (sempre presente: imagem + máscara alfa)."""
     saida = subprocess.run(["pdfimages", "-list", str(pdf)], capture_output=True, text=True, check=True).stdout
-    return len(saida.splitlines()) - 2
+    return len(saida.splitlines()) - 2 - 2
 
 
 def _gravar_logo(tmp_path, job_id):

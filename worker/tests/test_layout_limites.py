@@ -13,7 +13,7 @@ from qgis.core import QgsLayoutItemLabel
 import pdf_verif
 import poligonos
 from geolume_worker.input_loader import load_input
-from geolume_worker.layout import export_map_pdf, montar_mapa
+from geolume_worker.layout import MARCA_GEOLUME, TEXTO_AUTORIA, export_map_pdf, montar_mapa
 from geolume_worker.processing import process
 
 MARGEM_PT = 5 * pdf_verif.MM
@@ -207,7 +207,10 @@ def _grupos(layout, logo):
         "cabecalho": _uniao(_caixa(r) for r in rotulos
                             if "Mapa de Localização" in r.currentText() or r.currentText().startswith("Responsável")),
         "logo": _uniao(_caixa(f) for f in figuras if logo and f.picturePath() == str(logo)),
-        "norte": _uniao(_caixa(f) for f in figuras if not (logo and f.picturePath() == str(logo))),
+        "norte": _uniao(_caixa(f) for f in figuras
+                        if not (logo and f.picturePath() == str(logo)) and f.picturePath() != str(MARCA_GEOLUME)),
+        "autoria": _uniao([_caixa(f) for f in figuras if f.picturePath() == str(MARCA_GEOLUME)]
+                          + [_caixa(r) for r in rotulos if r.currentText() == TEXTO_AUTORIA]),
         "mapa": _uniao(_caixa(m) for m in _itens(layout, QgsLayoutItemMap)),
         "propriedades": com(*PREFIXOS_PROPRIEDADES),
         "resumo": com("SIRGAS"),

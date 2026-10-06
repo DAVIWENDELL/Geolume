@@ -77,7 +77,7 @@ def test_quadro_tem_src_completo_centroide_e_fonte(qgis_app, fixtures_dir, arqui
 def _palavras_do_quadro(pdf):
     """Palavras do PDF dentro da caixa do quadro (zona livre abaixo do mapa, à direita da tabela)."""
     return [p for p in pdf_verif.palavras(pdf)
-            if p.x0 >= ZONA[0] * pdf_verif.MM and p.y0 >= 170 * pdf_verif.MM]
+            if p.x0 >= ZONA[0] * pdf_verif.MM and p.x1 <= ZONA[1] * pdf_verif.MM and p.y0 >= 170 * pdf_verif.MM]
 
 
 def test_corpo_do_quadro_com_fonte_minima_de_8_pt(qgis_app, fixtures_dir, tmp_path):

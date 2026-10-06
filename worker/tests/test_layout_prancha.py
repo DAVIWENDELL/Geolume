@@ -40,8 +40,9 @@ def _junto(texto):
 
 
 def _imagens(pdf):
+    """Imagens raster além da marca do GeoLume (sempre presente: imagem + máscara alfa)."""
     saida = subprocess.run(["pdfimages", "-list", str(pdf)], capture_output=True, text=True, check=True).stdout
-    return len(saida.splitlines()) - 2  # cabeçalho de duas linhas
+    return len(saida.splitlines()) - 2 - 2  # cabeçalho de duas linhas; marca do GeoLume
 
 
 def _itens(layout, tipo):

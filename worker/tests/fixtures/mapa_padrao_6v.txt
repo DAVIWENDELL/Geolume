@@ -6,7 +6,7 @@
 
 
 
-                                                                                                                                                          O                     L
+                                                                                                                                                            O                   L
 
 
 
@@ -47,7 +47,7 @@
                        47°56'00" O                      47°55'50" O                    47°55'40" O                    47°55'30" O
                                                                                                                                               Escala numérica: 1:6.000
               Tabela de vértices
-                                                                                                                                              0          90         180     270       360 m
+                                                                                                                                              0           90        180      270      360 m
               Vértice   E (m)     N (m)    Azimute    Dist. (m)
               ────────────────────────────────────────────────────────────────────
               V1      185981.40 8257079.61    78°45'28"   305.38
@@ -61,6 +61,6 @@
                                                                                      Lat 15°44'50.36" S Long 47°55'43.25" O
                                                                                      UTM: E 186147.64 m N 8256835.65 m
                                                                                      Coordenadas apresentadas correspondem
-                                                                                     ao centroide da geometria.
+                                                                                     ao centroide da geometria.                                        Gerado pelo GeoLume
                                                                                      Fonte da geometria: GeoJSON fornecido pelo usuário.
 

@@ -42,6 +42,11 @@ TITULO_PADRAO = "GeoLume — Mapa de Localização"
 ROSA_DOS_VENTOS = Path(__file__).parent / "assets" / "rosa_dos_ventos.svg"
 _ROSA_X, _ROSA_Y, _ROSA_LADO = 238.5, 30, 28
 _FONTE_ROSA = 9
+# Autoria do sistema (não é selo técnico): marca oficial já versionada para a tela, no rodapé da coluna direita.
+MARCA_GEOLUME = Path(__file__).resolve().parent.parent / "web" / "assets" / "geolume-marca-transparente.png"
+TEXTO_AUTORIA = "Gerado pelo GeoLume"
+_MARCA_LADO = 8
+_FONTE_AUTORIA = 7
 # Cabeçalho: título e responsável à esquerda, logo à direita, tudo acima do mapa (y = 25).
 _CABECALHO_LARGURA = 222
 _LOGO_POSICAO, _LOGO_TAMANHO = (237, 5), (50, 17)
@@ -299,6 +304,24 @@ def _grade_gms(layout: QgsPrintLayout, mapa: QgsLayoutItemMap) -> None:
     mapa.updateBoundingRect()
 
 
+def _autoria(layout: QgsPrintLayout) -> None:
+    """Marca do GeoLume e "Gerado pelo GeoLume" na faixa do quadro de fontes, alinhadas à base dele.
+
+    Independente da logo do cliente (canto superior direito); abaixo da legenda lateral, que termina em y ≈ 186.
+    """
+    y = QUADRO_BASE - _MARCA_LADO
+    marca = QgsLayoutItemPicture(layout)
+    marca.setId("Marca GeoLume")
+    marca.setPicturePath(str(MARCA_GEOLUME), Qgis.PictureFormat.Raster)
+    marca.setResizeMode(QgsLayoutItemPicture.ResizeMode.Zoom)
+    marca.attemptMove(QgsLayoutPoint(COLUNA_DIREITA[0], y))
+    marca.attemptResize(QgsLayoutSize(_MARCA_LADO, _MARCA_LADO))
+    layout.addLayoutItem(marca)
+    texto = _label(layout, TEXTO_AUTORIA, _FONTE_AUTORIA, 0, 0)
+    texto.attemptMove(QgsLayoutPoint(COLUNA_DIREITA[0] + _MARCA_LADO + 1.5,
+                                     y + (_MARCA_LADO - texto.sizeWithUnits().height()) / 2))
+
+
 def _moldura_cartografica(layout: QgsPrintLayout) -> None:
     """Linha externa forte e interna fina em volta da área útil; só contorno, nada fica coberto."""
     for nome, recuo, espessura in _MOLDURAS:
@@ -443,6 +466,7 @@ def montar_mapa(
     elif prancha.legenda == "inferior":
         # Faixa abaixo do mapa, à direita da tabela (que nunca passa de x = 112).
         _legenda(layout, prancha, FAIXA_INFERIOR[0] + 3, FAIXA_INFERIOR[2] + 2)
+    _autoria(layout)
     _moldura_cartografica(layout)
     return project, layout
 
