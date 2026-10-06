@@ -359,5 +359,5 @@ def test_pdf_tem_norte_e_escala_em_todos_os_estilos(qgis_app, summary, tmp_path)
     from qgis.core import QgsLayoutItemScaleBar
     for estilo in ESTILOS:
         _, layout = montar_mapa(summary, prancha=Prancha(estilo=estilo.id, legenda="lateral"))
-        setas = [f for f in _itens(layout, QgsLayoutItemPicture) if f.picturePath().endswith("NorthArrow_02.svg")]
+        setas = [f for f in _itens(layout, QgsLayoutItemPicture) if f.picturePath().endswith("rosa_dos_ventos.svg")]
         assert len(setas) == 1 and len(_itens(layout, QgsLayoutItemScaleBar)) == 1

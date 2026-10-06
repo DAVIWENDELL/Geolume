@@ -22,11 +22,9 @@ from qgis.core import (
     QgsLayoutItemShape,
     QgsLayoutPoint,
     QgsLayoutSize,
-    QgsPathResolver,
     QgsPointXY,
     QgsPrintLayout,
     QgsProject,
-    QgsSymbolLayerUtils,
     QgsTextFormat,
     QgsVectorLayer,
 )
@@ -40,7 +38,10 @@ from geolume_worker.processing import ParcelSummary
 from geolume_worker.texto import informado, texto_literal
 
 TITULO_PADRAO = "GeoLume — Mapa de Localização"
-_SETA_NORTE = "arrows/NorthArrow_02.svg"
+# Rosa dos ventos: SVG próprio versionado no pacote (sem rede). Fica na coluna direita, entre o logo e o resumo.
+ROSA_DOS_VENTOS = Path(__file__).parent / "assets" / "rosa_dos_ventos.svg"
+_ROSA_X, _ROSA_Y, _ROSA_LADO = 238.5, 30, 28
+_FONTE_ROSA = 9
 # Cabeçalho: título e responsável à esquerda, logo à direita, tudo acima do mapa (y = 25).
 _CABECALHO_LARGURA = 222
 _LOGO_POSICAO, _LOGO_TAMANHO = (237, 5), (50, 17)
@@ -296,6 +297,37 @@ def _grade_gms(layout: QgsPrintLayout, mapa: QgsLayoutItemMap) -> None:
     mapa.updateBoundingRect()
 
 
+def _rosa_dos_ventos(layout: QgsPrintLayout, mapa: QgsLayoutItemMap) -> None:
+    """Rosa dos ventos vinculada ao mapa, com N (negrito), S, L e O em volta.
+
+    O mapa é sempre norte para cima, então as letras (rótulos fixos) ficam coerentes com o giro da figura.
+    """
+    rosa = QgsLayoutItemPicture(layout)
+    rosa.setPicturePath(str(ROSA_DOS_VENTOS), Qgis.PictureFormat.SVG)
+    rosa.setLinkedMap(mapa)
+    rosa.attemptMove(QgsLayoutPoint(_ROSA_X, _ROSA_Y))
+    rosa.attemptResize(QgsLayoutSize(_ROSA_LADO, _ROSA_LADO))
+    layout.addLayoutItem(rosa)
+    cx, cy = _ROSA_X + _ROSA_LADO / 2, _ROSA_Y + _ROSA_LADO / 2
+    for letra in ("N", "S", "L", "O"):
+        rotulo = _label(layout, letra, _FONTE_ROSA, 0, 0)
+        if letra == "N":
+            formato = rotulo.textFormat()
+            fonte = formato.font()
+            fonte.setBold(True)
+            formato.setFont(fonte)
+            rotulo.setTextFormat(formato)
+            rotulo.adjustSizeToText()
+        largura, altura = rotulo.sizeWithUnits().width(), rotulo.sizeWithUnits().height()
+        x, y = {
+            "N": (cx - largura / 2, _ROSA_Y - altura),
+            "S": (cx - largura / 2, _ROSA_Y + _ROSA_LADO),
+            "L": (_ROSA_X + _ROSA_LADO, cy - altura / 2),
+            "O": (_ROSA_X - largura, cy - altura / 2),
+        }[letra]
+        rotulo.attemptMove(QgsLayoutPoint(x, y))
+
+
 def montar_mapa(
     summary: ParcelSummary,
     title: str = TITULO_PADRAO,
@@ -357,12 +389,7 @@ def montar_mapa(
         120,
     )
 
-    seta = QgsLayoutItemPicture(layout)
-    seta.setPicturePath(QgsSymbolLayerUtils.svgSymbolNameToPath(_SETA_NORTE, QgsPathResolver()))
-    seta.setLinkedMap(mapa)
-    seta.attemptMove(QgsLayoutPoint(240, 25))
-    seta.attemptResize(QgsLayoutSize(20, 25))
-    layout.addLayoutItem(seta)
+    _rosa_dos_ventos(layout, mapa)
 
     escala = QgsLayoutItemScaleBar(layout)
     escala.setStyle("Single Box")
