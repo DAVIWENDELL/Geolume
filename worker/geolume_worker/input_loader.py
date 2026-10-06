@@ -27,10 +27,19 @@ def load_input(path: Path) -> LoadedInput:
         raise InvalidInputError("arquivo_nao_encontrado", f"Arquivo {path.name} não encontrado.")
     if path.stat().st_size > MAX_BYTES:
         raise InvalidInputError("arquivo_muito_grande", f"Arquivo maior que {MAX_BYTES // (1024 * 1024)} MB.")
+    # A mensagem vai ao cliente: diz a causa sem repassar o texto bruto da exceção do Python.
     try:
-        dados = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise InvalidInputError("json_invalido", f"Arquivo não é JSON válido: {exc}") from exc
+        texto = path.read_text(encoding="utf-8-sig")  # aceita o BOM que editores do Windows gravam
+    except UnicodeDecodeError as exc:
+        raise InvalidInputError("json_invalido", "O arquivo precisa estar em UTF-8.") from exc
+    if not texto.strip():
+        raise InvalidInputError("json_invalido", "O arquivo está vazio.")
+    try:
+        dados = json.loads(texto)
+    except json.JSONDecodeError as exc:
+        raise InvalidInputError(
+            "json_invalido", f"O arquivo não é um JSON válido (erro na linha {exc.lineno}, coluna {exc.colno})."
+        ) from exc
     if isinstance(dados, dict) and dados.get("type") == "FeatureCollection" and not dados.get("features"):
         raise InvalidInputError("sem_feicoes", "O GeoJSON não contém feições.")
 

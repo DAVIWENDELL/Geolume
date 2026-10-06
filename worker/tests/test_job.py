@@ -173,3 +173,14 @@ def test_estilo_e_alfa_nao_mudam_o_memorial(qgis_app, fixtures_dir, tmp_path):
 
     assert texto(estilizado.memorial_path) == texto(padrao.memorial_path)
     assert "Legenda" not in texto(estilizado.memorial_path)
+
+
+def test_run_job_arquivo_vazio_falha_com_causa_clara_sem_pasta(qgis_app, tmp_path):
+    entrada = tmp_path / "entrada" / "vazio.geojson"
+    entrada.parent.mkdir()
+    entrada.write_bytes(b"")
+    saida = tmp_path / "saida"
+    with pytest.raises(InvalidInputError) as exc:
+        run_job(entrada, saida, job_id="vazio")
+    assert str(exc.value) == "json_invalido: O arquivo está vazio."
+    assert not (saida / "vazio").exists()  # nenhum mapa.pdf, memorial.pdf ou resultado.json parcial

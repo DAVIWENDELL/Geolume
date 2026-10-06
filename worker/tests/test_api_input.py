@@ -249,3 +249,21 @@ def test_sem_content_length_fixo_o_corpo_segue_o_descritor(api_module, jobs, fix
     resposta = api_module.job_input("t1", USUARIO)
 
     assert "content-length" not in resposta.headers
+
+
+@pytest.mark.parametrize("conteudo, esperado", [
+    (b"", "json_invalido: O arquivo está vazio."),
+    (b'{"type": "FeatureCollection",\n "features": [', "json_invalido: O arquivo não é um JSON válido (erro na linha 2, coluna 15)."),
+    ('{"nome": "Sítio"}'.encode("latin-1"), "json_invalido: O arquivo precisa estar em UTF-8."),
+])
+def test_erro_de_json_chega_ao_cliente_com_codigo_e_causa_clara(api_module, qgis_app, tmp_path, conteudo, esperado):
+    from geolume_worker.errors import InvalidInputError
+    from geolume_worker.input_loader import load_input
+
+    entrada = tmp_path / "entrada.geojson"
+    entrada.write_bytes(conteudo)
+    with pytest.raises(InvalidInputError) as exc:
+        load_input(entrada)
+    # O worker grava str(exc) no job; a API só repassa erros de validação com código conhecido.
+    assert api_module._erro_publico(str(exc.value)) == esperado
+    assert str(tmp_path) not in esperado

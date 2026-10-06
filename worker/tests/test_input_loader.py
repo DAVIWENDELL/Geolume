@@ -60,3 +60,53 @@ def test_excesso_de_vertices(qgis_app, tmp_path):
     with pytest.raises(InvalidInputError) as exc:
         load_input(arquivo)
     assert exc.value.codigo == "excesso_de_vertices"
+
+
+# ---- Mensagem clara para JSON vazio ou malformado (código json_invalido preservado) --------------
+
+_TEXTO_BRUTO = ("Expecting", "char ", "codec", "line ", "column ", "Traceback", "/", "\\")
+
+
+def _erro_json(tmp_path, conteudo):
+    arquivo = tmp_path / "entrada.geojson"
+    arquivo.write_text(conteudo, encoding="utf-8")
+    with pytest.raises(InvalidInputError) as exc:
+        load_input(arquivo)
+    assert exc.value.codigo == "json_invalido"
+    for trecho in _TEXTO_BRUTO:  # nada da exceção do Python nem de caminho do servidor
+        assert trecho not in exc.value.mensagem, exc.value.mensagem
+    assert str(exc.value) == f"json_invalido: {exc.value.mensagem}"  # formato "codigo: mensagem" que a API repassa
+    return exc.value.mensagem
+
+
+def test_arquivo_vazio_diz_que_esta_vazio(qgis_app, tmp_path):
+    assert _erro_json(tmp_path, "") == "O arquivo está vazio."
+
+
+def test_json_malformado_aponta_linha_e_coluna_sem_texto_bruto(qgis_app, tmp_path):
+    mensagem = _erro_json(tmp_path, '{"type": "FeatureCollection",\n "features": [')
+    assert mensagem == "O arquivo não é um JSON válido (erro na linha 2, coluna 15)."
+
+
+def test_json_valido_continua_carregando(qgis_app, fixtures_dir):
+    assert load_input(fixtures_dir / "lote_simples.geojson").source_crs in {"EPSG:4326", "EPSG:4674"}
+
+
+def test_arquivo_so_com_espacos_tambem_e_vazio(qgis_app, tmp_path):
+    assert _erro_json(tmp_path, "  \n\t\r\n ") == "O arquivo está vazio."
+
+
+def test_arquivo_fora_de_utf8_diz_a_codificacao(qgis_app, tmp_path):
+    arquivo = tmp_path / "latin1.geojson"
+    arquivo.write_bytes('{"type": "FeatureCollection", "nome": "Sítio"}'.encode("latin-1"))
+    with pytest.raises(InvalidInputError) as exc:
+        load_input(arquivo)
+    assert exc.value.codigo == "json_invalido"
+    assert exc.value.mensagem == "O arquivo precisa estar em UTF-8."
+
+
+def test_geojson_valido_com_bom_utf8_e_aceito(qgis_app, fixtures_dir, tmp_path):
+    arquivo = tmp_path / "com_bom.geojson"
+    arquivo.write_bytes(b"\xef\xbb\xbf" + (fixtures_dir / "lote_simples.geojson").read_bytes())
+    loaded = load_input(arquivo)
+    assert len(loaded.geometry.asPolygon()[0]) - 1 == 4
