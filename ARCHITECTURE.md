@@ -61,10 +61,10 @@ A API publica somente `127.0.0.1:8000` no Compose de desenvolvimento. `/health` 
 ## Contrato de entrada atual
 
 - GeoJSON com exatamente um polígono simples.
-- EPSG:4326 ou EPSG:4674.
+- EPSG:4326 ou EPSG:4674. Membro `crs` legado só com nome EPSG/URN aceito; qualquer outro (inclusive `link`) é recusado antes do OGR, que cairia em EPSG:4326 sem avisar ou baixaria o `href`.
 - Sem furos, sem múltiplas feições e sem múltiplas partes.
 - Limite de 10 MB e até 5.000 vértices.
-- Cobertura UTM SIRGAS 2000 suportada: fusos 17N–22N e 18S–25S.
+- Cobertura UTM SIRGAS 2000 suportada: fusos 17N–22N e 18S–25S, conferida em cada vértice (não só no centroide). Latitude fora de -90°..90° ou longitude fora de -180°..180° sai como `coordenada_invalida`.
 - Upload assíncrono total: 12 MB, incluindo logo de até 2 MB.
 
 ## Contratos de saída

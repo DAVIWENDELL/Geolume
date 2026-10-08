@@ -267,3 +267,18 @@ def test_erro_de_json_chega_ao_cliente_com_codigo_e_causa_clara(api_module, qgis
     # O worker grava str(exc) no job; a API só repassa erros de validação com código conhecido.
     assert api_module._erro_publico(str(exc.value)) == esperado
     assert str(tmp_path) not in esperado
+
+
+@pytest.mark.parametrize("erro", [
+    "coordenada_invalida: Longitude 200° no vértice 1 fora do intervalo de -180° a 180°.",
+    "crs_nao_suportado: Sistema de coordenadas declarado no GeoJSON não reconhecido. "
+    "Use EPSG:4326 (WGS 84) ou EPSG:4674 (SIRGAS 2000).",
+    "fora_da_cobertura: O vértice 2 (longitude -20°, latitude -15.8°) está fora da cobertura SIRGAS 2000 / UTM "
+    "aceita: fusos 17N a 22N e 18S a 25S.",
+])
+def test_erro_de_coordenada_chega_ao_cliente_como_veio(api_module, erro):
+    assert api_module._erro_publico(erro) == erro
+
+
+def test_erro_bruto_de_geometria_nula_nao_chega_ao_cliente(api_module):
+    assert api_module._erro_publico("Null geometry cannot be converted to point.") == "Falha no processamento do job."

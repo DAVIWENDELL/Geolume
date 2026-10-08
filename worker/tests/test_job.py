@@ -184,3 +184,28 @@ def test_run_job_arquivo_vazio_falha_com_causa_clara_sem_pasta(qgis_app, tmp_pat
         run_job(entrada, saida, job_id="vazio")
     assert str(exc.value) == "json_invalido: O arquivo está vazio."
     assert not (saida / "vazio").exists()  # nenhum mapa.pdf, memorial.pdf ou resultado.json parcial
+
+
+@pytest.mark.parametrize("anel, crs, codigo", [
+    ([[-80.0, 95.0], [-79.99, 95.0], [-79.99, 95.01], [-80.0, 95.0]], None, "coordenada_invalida"),
+    ([[200.0, -15.0], [200.01, -15.0], [200.01, -14.99], [200.0, -15.0]], None, "coordenada_invalida"),
+    ([[-47.9, -15.8], [-47.89, -15.8], [-47.89, -15.79], [-47.9, -15.8]],
+     {"type": "name", "properties": {"name": "EPSG:999999"}}, "crs_nao_suportado"),
+    ([[-47.9, -15.8], [-20.0, -15.8], [-20.0, -15.7], [-47.9, -15.7], [-47.9, -15.8]], None, "fora_da_cobertura"),
+])
+def test_run_job_coordenada_invalida_falha_sem_artefatos(qgis_app, tmp_path, anel, crs, codigo):
+    dados = {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [anel]}}],
+    }
+    if crs:
+        dados["crs"] = crs
+    entrada = tmp_path / "entrada" / "coord.geojson"
+    entrada.parent.mkdir()
+    entrada.write_text(json.dumps(dados), encoding="utf-8")
+    saida = tmp_path / "saida"
+    with pytest.raises(InvalidInputError) as exc:
+        run_job(entrada, saida, job_id="coord")
+    assert exc.value.codigo == codigo
+    assert str(exc.value) == f"{codigo}: {exc.value.mensagem}"
+    assert not (saida / "coord").exists()  # nenhum mapa.pdf, memorial.pdf ou resultado.json parcial

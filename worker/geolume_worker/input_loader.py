@@ -1,16 +1,21 @@
 """Leitura e validação da entrada GeoJSON (1 polígono simples, EPSG:4326/4674)."""
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from qgis.core import Qgis, QgsGeometry, QgsVectorLayer
 
 from geolume_worker.errors import InvalidInputError
+from geolume_worker.geometry import validar_coordenadas
 
 MAX_BYTES = 10 * 1024 * 1024
 MAX_VERTICES = 5000
 CRS_ACEITOS = {"EPSG:4326", "EPSG:4674"}
+# Nomes do membro "crs" (GeoJSON de 2008) que o OGR lê: EPSG:n, a URN EPSG e a URN CRS84 (= EPSG:4326).
+_EPSG_DECLARADO = re.compile(r"(?:EPSG:|URN:OGC:DEF:CRS:EPSG:[0-9.]*:)([0-9]{1,6})")
+_CRS84_DECLARADO = "URN:OGC:DEF:CRS:OGC:1.3:CRS84"
 
 
 @dataclass
@@ -19,6 +24,34 @@ class LoadedInput:
     geometry: QgsGeometry
     source_crs: str
     properties: dict[str, object]
+
+
+def _crs_nao_suportado(nome: str | None) -> InvalidInputError:
+    aceitos = "Use EPSG:4326 (WGS 84) ou EPSG:4674 (SIRGAS 2000)."
+    if nome:
+        return InvalidInputError("crs_nao_suportado", f"Sistema de coordenadas {nome} não suportado. {aceitos}")
+    return InvalidInputError(
+        "crs_nao_suportado", f"Sistema de coordenadas declarado no GeoJSON não reconhecido. {aceitos}"
+    )
+
+
+def _conferir_crs_declarado(dados: object) -> None:
+    """Confere o membro "crs" antes do OGR: ele cai em EPSG:4326 sem avisar e baixa o href de um CRS "link"."""
+    if not isinstance(dados, dict) or dados.get("crs") is None:
+        return
+    crs = dados["crs"]
+    propriedades = crs.get("properties") if isinstance(crs, dict) and crs.get("type") == "name" else None
+    nome = propriedades.get("name") if isinstance(propriedades, dict) else None
+    if isinstance(nome, str):
+        nome = nome.strip().upper()
+        if nome == _CRS84_DECLARADO:
+            return
+        if epsg := _EPSG_DECLARADO.fullmatch(nome):
+            authid = f"EPSG:{int(epsg[1])}"  # só dígitos do cliente voltam na mensagem
+            if authid in CRS_ACEITOS:
+                return
+            raise _crs_nao_suportado(authid)
+    raise _crs_nao_suportado(None)
 
 
 def load_input(path: Path) -> LoadedInput:
@@ -42,6 +75,7 @@ def load_input(path: Path) -> LoadedInput:
         ) from exc
     if isinstance(dados, dict) and dados.get("type") == "FeatureCollection" and not dados.get("features"):
         raise InvalidInputError("sem_feicoes", "O GeoJSON não contém feições.")
+    _conferir_crs_declarado(dados)
 
     layer = QgsVectorLayer(str(path), "entrada", "ogr")
     if not layer.isValid():
@@ -69,6 +103,7 @@ def load_input(path: Path) -> LoadedInput:
 
     source_crs = layer.crs().authid()
     if source_crs not in CRS_ACEITOS:
-        raise InvalidInputError("crs_nao_suportado", f"CRS {source_crs or 'desconhecido'} não suportado.")
+        raise _crs_nao_suportado(source_crs)
+    validar_coordenadas([(p.x(), p.y()) for p in aneis[0][:-1]])  # anel sem o ponto de fechamento
     properties = dict(zip(layer.fields().names(), features[0].attributes()))
     return LoadedInput(layer=layer, geometry=geometry, source_crs=source_crs, properties=properties)

@@ -5,6 +5,7 @@ from geolume_worker.geometry import (
     format_dms,
     grid_azimuth_deg,
     utm_epsg_for,
+    validar_coordenadas,
     vertex_table,
 )
 
@@ -205,3 +206,71 @@ def test_intervalo_grade_da_entre_2_e_6_intervalos():
 def test_intervalo_grade_invalido(invalido):
     with pytest.raises(ValueError):
         intervalo_grade(invalido)
+
+
+# ---- Limites geográficos e cobertura SIRGAS 2000 / UTM por vértice ---------------------------------
+
+_COBERTURA = "fusos 17N a 22N e 18S a 25S"
+
+
+def _erro_coordenadas(anel):
+    with pytest.raises(InvalidInputError) as exc:
+        validar_coordenadas(anel)
+    assert str(exc.value) == f"{exc.value.codigo}: {exc.value.mensagem}"
+    return exc.value
+
+
+def test_latitude_acima_de_90_graus_e_rejeitada():
+    erro = _erro_coordenadas([(-47.9, -15.8), (-47.8, -15.8), (-47.8, 95.0)])
+    assert erro.codigo == "coordenada_invalida"
+    assert erro.mensagem == (
+        "Latitude 95° no vértice 3 fora do intervalo de -90° a 90°. "
+        "Confira se as coordenadas estão na ordem longitude, latitude."
+    )
+
+
+def test_latitude_abaixo_de_menos_90_graus_e_rejeitada():
+    assert _erro_coordenadas([(-50.0, -90.5), (-49.9, -15.8), (-49.9, -15.7)]).codigo == "coordenada_invalida"
+
+
+def test_longitude_acima_de_180_graus_e_rejeitada():
+    erro = _erro_coordenadas([(200.0, -15.0), (200.01, -15.0), (200.01, -14.99)])
+    assert erro.codigo == "coordenada_invalida"
+    assert erro.mensagem == "Longitude 200° no vértice 1 fora do intervalo de -180° a 180°."
+
+
+def test_longitude_abaixo_de_menos_180_graus_e_rejeitada():
+    assert _erro_coordenadas([(-47.9, -15.8), (-180.25, -15.8), (-47.8, -15.7)]).codigo == "coordenada_invalida"
+
+
+def test_vertice_fora_da_cobertura_e_rejeitado_mesmo_com_centro_dentro():
+    # Centro no fuso 25S (coberto), mas o vértice 2 cai no fuso 27S (longitude -20).
+    erro = _erro_coordenadas([(-47.9, -15.8), (-20.0, -15.8), (-20.0, -15.7), (-47.9, -15.7)])
+    assert erro.codigo == "fora_da_cobertura"
+    assert erro.mensagem == (
+        f"O vértice 2 (longitude -20°, latitude -15.8°) está fora da cobertura SIRGAS 2000 / UTM aceita: {_COBERTURA}."
+    )
+
+
+def test_limites_geograficos_vem_antes_da_cobertura():
+    # Vértice 1 fora da cobertura e vértice 2 com latitude impossível: aparece o erro mais grave.
+    assert _erro_coordenadas([(10.0, 50.0), (-47.9, 91.0), (-47.8, -15.7)]).codigo == "coordenada_invalida"
+
+
+@pytest.mark.parametrize("anel", [
+    [(-47.9, -15.8), (-47.89, -15.8), (-47.89, -15.79), (-47.9, -15.79)],  # Brasília, 23S
+    [(-48.1, -15.8), (-47.9, -15.8), (-47.9, -15.7)],  # atravessa 22S/23S
+    [(-51.1, -0.1), (-51.0, -0.1), (-51.0, 0.1), (-51.1, 0.1)],  # atravessa o equador no fuso 22
+    [(-60.7, 2.8), (-60.6, 2.8), (-60.6, 2.9)],  # Boa Vista, 20N
+])
+def test_coordenadas_validas_na_cobertura_passam(anel):
+    validar_coordenadas(anel)
+
+
+def test_centro_fora_da_cobertura_tem_mensagem_clara_sem_ruido_de_float():
+    with pytest.raises(InvalidInputError) as exc:
+        utm_epsg_for(10.004999999999999, 50.004999999999995)
+    assert exc.value.mensagem == (
+        "O centro do polígono (longitude 10.005°, latitude 50.005°) está fora da cobertura SIRGAS 2000 / UTM aceita: "
+        f"{_COBERTURA}."
+    )

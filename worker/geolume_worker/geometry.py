@@ -10,16 +10,52 @@ _FUSOS_SUL = range(18, 26)
 _FUSOS_NORTE = range(17, 23)
 
 
-def utm_epsg_for(lon: float, lat: float) -> int:
+_COBERTURA = "cobertura SIRGAS 2000 / UTM aceita: fusos 17N a 22N e 18S a 25S"
+
+
+def _graus(valor: float) -> str:
+    """Até 6 casas, sem ruído do float nem zeros à direita: 10.004999999999999 → 10.005."""
+    return f"{valor:.6f}".rstrip("0").rstrip(".")
+
+
+def _epsg_coberto(lon: float, lat: float) -> int | None:
     fuso = int(math.floor((lon + 180.0) / 6.0)) + 1
     if lat < 0 and fuso in _FUSOS_SUL:
         return 31960 + fuso
     if lat >= 0 and fuso in _FUSOS_NORTE:
         return 31955 + fuso
-    raise InvalidInputError(
-        "fora_da_cobertura",
-        f"Coordenada ({lon}, {lat}) fora dos fusos SIRGAS 2000 / UTM suportados.",
-    )
+    return None
+
+
+def utm_epsg_for(lon: float, lat: float) -> int:
+    epsg = _epsg_coberto(lon, lat)
+    if epsg is None:
+        raise InvalidInputError(
+            "fora_da_cobertura",
+            f"O centro do polígono (longitude {_graus(lon)}°, latitude {_graus(lat)}°) está fora da {_COBERTURA}.",
+        )
+    return epsg
+
+
+def validar_coordenadas(anel: list[tuple[float, float]]) -> None:
+    """Vértices (lon, lat) geográficos: primeiro os limites da Terra, depois a cobertura UTM, um a um."""
+    for i, (lon, lat) in enumerate(anel, start=1):
+        if not -90.0 <= lat <= 90.0:
+            raise InvalidInputError(
+                "coordenada_invalida",
+                f"Latitude {_graus(lat)}° no vértice {i} fora do intervalo de -90° a 90°. "
+                "Confira se as coordenadas estão na ordem longitude, latitude.",
+            )
+        if not -180.0 <= lon <= 180.0:
+            raise InvalidInputError(
+                "coordenada_invalida", f"Longitude {_graus(lon)}° no vértice {i} fora do intervalo de -180° a 180°."
+            )
+    for i, (lon, lat) in enumerate(anel, start=1):
+        if _epsg_coberto(lon, lat) is None:
+            raise InvalidInputError(
+                "fora_da_cobertura",
+                f"O vértice {i} (longitude {_graus(lon)}°, latitude {_graus(lat)}°) está fora da {_COBERTURA}.",
+            )
 
 
 def grid_azimuth_deg(e1: float, n1: float, e2: float, n2: float) -> float:

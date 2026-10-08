@@ -17,6 +17,7 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 - [x] Botão Processar mantido alcançável com a prancha aberta, removendo o sticky da coluna de fluxo e cobrindo o comportamento com E2E.
 - [x] Varredura final de UX da tela principal (2026-10-01): amostra da legenda segue o estilo do polígono, alvos de 44 px em tablet e celular, histórico mobile sem links no cartão e falha sem código interno; cobertos por unitário e E2E.
 - [x] Quadro de coordenadas e fontes no `mapa.pdf` (2026-10-05, 1ª fatia do layout profissional): SRC completo com fuso/hemisfério e EPSG UTM, EPSG:4674 para latitude/longitude, centroide em GMS (S/N, L/O) e UTM, e "Fonte da geometria: GeoJSON fornecido pelo usuário."; suíte do worker verde, PDFs reais inspecionados, geração em container `--network none`, `memorial.pdf` e `resultado.json` inalterados.
+- [x] Validação de coordenadas e cobertura (2026-10-08): latitude/longitude fora dos limites (`coordenada_invalida`, código novo liberado na API), cobertura SIRGAS 2000 / UTM conferida por vértice, CRS declarado desconhecido ou `link` recusado antes do OGR; mensagens em português no formato `codigo: mensagem`; entradas inválidas não deixam pasta do job; suíte do worker verde normal e `--network none`; `mapa.pdf`, `memorial.pdf` e `resultado.json` de entradas válidas inalterados.
 - [x] Testes unitários, worker, API e Playwright versionados.
 - [x] Proteções de autenticação, autorização, CSRF, limites e arquivos.
 

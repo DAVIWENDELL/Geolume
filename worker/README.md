@@ -278,7 +278,7 @@ npm run test:e2e    # Playwright com o Chrome do sistema
 
 ## Entrada aceita
 
-GeoJSON (EPSG:4326 ou EPSG:4674) com exatamente 1 polígono simples, sem furos, até 10 MB e 5 000 vértices, dentro dos fusos UTM 17N–22N / 18S–25S. Erros saem com código 2 e JSON no stderr, por exemplo `{"status": "erro", "codigo": "poligono_com_furos", ...}`.
+GeoJSON (EPSG:4326 ou EPSG:4674) com exatamente 1 polígono simples, sem furos, até 10 MB e 5 000 vértices, com todos os vértices dentro dos fusos UTM 17N–22N / 18S–25S. Coordenadas fora de -90°..90° (latitude) ou -180°..180° (longitude) saem como `coordenada_invalida`; vértice fora dos fusos, como `fora_da_cobertura`; CRS declarado não aceito ou não reconhecido, como `crs_nao_suportado`. Erros saem com código 2 e JSON no stderr, por exemplo `{"status": "erro", "codigo": "poligono_com_furos", ...}`.
 
 ## Métricas
 
