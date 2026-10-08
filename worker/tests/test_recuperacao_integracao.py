@@ -424,3 +424,68 @@ def test_sessao_do_diagnostico_recusa_escrita(jobs_isolados):
         with diagnostico_jobs._conexao_leitura() as conn, conn.cursor() as cur:
             cur.execute("UPDATE jobs SET status = 'failed' WHERE id = %s", (job_id,))
     assert recuperacao.ler_job(job_id)["status"] == "queued"
+
+
+# ---- CLI manual de recuperação -------------------------------------------------------
+
+
+def _cli(tmp_path, *args):
+    import contextlib
+    import io
+    import json
+
+    import recuperar_job
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        codigo = recuperar_job.main(["--saida", str(tmp_path), *args])
+    return codigo, json.loads(buffer.getvalue())
+
+
+def test_cli_sem_apply_nao_altera_o_banco(jobs_isolados, tmp_path):
+    job_id = _inserir(status="queued", task_id=None, started_at=None)
+    antes = _tabela()
+    codigo, r = _cli(tmp_path, "--job-id", job_id)
+    assert (codigo, r["modo"]) == (0, "diagnostico")
+    assert r["diagnostico"]["jobs"][0]["categoria"] == "candidato_recuperacao"
+    assert _tabela() == antes
+
+
+def test_cli_confirmacao_errada_nao_altera_o_banco(jobs_isolados, tmp_path):
+    job_id = _inserir(status="queued", task_id=None, started_at=None)
+    antes = _tabela()
+    codigo, r = _cli(tmp_path, "--apply", "--job-id", job_id, "--confirm-job-id", "outro")
+    assert (codigo, r["resultado"]) == (2, "confirmacao_invalida")
+    assert _tabela() == antes
+
+
+def test_cli_recupera_so_o_job_pedido(jobs_isolados, tmp_path):
+    alvo = _inserir(status="queued", task_id=None, started_at=None)
+    vizinho = _inserir(status="queued", task_id=None, started_at=None)
+    antes = recuperacao.ler_job(vizinho)
+    codigo, r = _cli(tmp_path, "--apply", "--job-id", alvo, "--confirm-job-id", alvo)
+    assert (codigo, r["resultado"]) == (0, "marcado_failed")
+    job = recuperacao.ler_job(alvo)
+    assert job["status"] == "failed" and job["erro"].startswith("job_expirado: ")
+    assert recuperacao.ler_job(vizinho) == antes
+
+
+def test_cli_tenant_incorreto_nao_altera(jobs_isolados, tmp_path):
+    job_id = _inserir(status="queued", task_id=None, started_at=None, tenant_id="outro")
+    antes = _tabela()
+    codigo, r = _cli(tmp_path, "--apply", "--job-id", job_id, "--confirm-job-id", job_id, "--tenant", "demo")
+    assert (codigo, r["resultado"]) == (1, "nao_encontrado")
+    assert _tabela() == antes
+
+
+def test_cli_aplicacoes_simultaneas_so_uma_marca(jobs_isolados, tmp_path):
+    import recuperar_job
+
+    for _ in range(3):
+        job_id = _inserir()
+        args = ["--saida", str(tmp_path), "--apply", "--job-id", job_id, "--confirm-job-id", job_id]
+        resultados = _corrida(*[lambda: recuperar_job.executar(recuperar_job._parser().parse_args(args))[1]
+                                ["resultado"]] * 4)
+        assert resultados.count("marcado_failed") == 1
+        assert set(resultados) <= {"marcado_failed", "outro_processo", "nao_expirado"}
+        assert recuperacao.ler_job(job_id)["status"] == "failed"
