@@ -16,6 +16,7 @@ def celery_module(monkeypatch):
     sys.modules.pop("celery_app", None)
     module = importlib.import_module("celery_app")
     monkeypatch.setattr(module, "update_job", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "concluir_job", lambda *args, **kwargs: True, raising=False)
     chamadas = []
 
     def run_job(entrada, saida, job_id, prancha=None):
@@ -91,14 +92,15 @@ def _registrar_status(celery_module, monkeypatch):
     return registros
 
 
-def test_task_marca_started_e_depois_completed_com_os_tres_artefatos(celery_module, monkeypatch):
+def test_task_marca_started_e_conclui_condicionalmente_com_os_tres_artefatos(celery_module, monkeypatch):
     registros = _registrar_status(celery_module, monkeypatch)
-    celery_module.process_job.run("/tmp/a.geojson", "job-a")
-    assert registros == [
-        ("job-a", "started", {}),
-        ("job-a", "completed", {"mapa_path": "/tmp/mapa.pdf", "memorial_path": "/tmp/memorial.pdf",
-                                "resultado_path": "/tmp/resultado.json"}),
-    ]
+    conclusoes = []
+    monkeypatch.setattr(celery_module, "concluir_job", lambda *args: conclusoes.append(args) or True,
+                        raising=False)
+    resposta = celery_module.process_job.run("/tmp/a.geojson", "job-a")
+    assert registros == [("job-a", "started", {})]  # completed só pelo UPDATE condicional
+    assert conclusoes == [("job-a", "/tmp/mapa.pdf", "/tmp/memorial.pdf", "/tmp/resultado.json")]
+    assert resposta["status"] == "completed"
 
 
 def test_task_marca_started_e_depois_failed_com_o_erro(celery_module, monkeypatch, tmp_path):
@@ -142,3 +144,64 @@ def test_banco_fora_ao_marcar_started_nao_deixa_upload_nem_job_na_fila(celery_mo
     assert celery_module.chamadas == []  # não processa um job que não conseguiu marcar
     assert not entrada.exists()
     assert not logo.exists()
+
+
+# ---- Conclusão tardia: o banco decide, nada é apagado ------------------------------
+
+
+def _job_gerado(celery_module, monkeypatch, tmp_path):
+    """run_job de verdade no disco (3 arquivos) e uploads do job presentes."""
+    monkeypatch.setattr(celery_module, "OUTPUT_DIR", tmp_path)
+    entrada = tmp_path / "inputs" / "job-a-lote.geojson"
+    entrada.parent.mkdir()
+    entrada.write_text("{}")
+    logo = tmp_path / "logos" / "job-a.png"
+    logo.parent.mkdir()
+    logo.write_bytes(b"logo")
+    pasta = tmp_path / "job-a"
+
+    def run_job(entrada_, saida, job_id, prancha=None):
+        pasta.mkdir()
+        for nome in ("mapa.pdf", "memorial.pdf", "resultado.json"):
+            (pasta / nome).write_bytes(b"ok")
+        return SimpleNamespace(job_id=job_id, pdf_path=pasta / "mapa.pdf", memorial_path=pasta / "memorial.pdf",
+                               json_path=pasta / "resultado.json", phases_ms={})
+
+    monkeypatch.setattr(celery_module, "run_job", run_job)
+    return entrada, logo, pasta
+
+
+def _intactos(entrada, logo, pasta):
+    assert sorted(p.name for p in pasta.iterdir()) == ["mapa.pdf", "memorial.pdf", "resultado.json"]
+    assert entrada.exists() and logo.exists()
+
+
+def test_conclusao_recusada_pelo_banco_nao_finge_sucesso_nem_apaga_nada(celery_module, monkeypatch, tmp_path,
+                                                                         caplog):
+    entrada, logo, pasta = _job_gerado(celery_module, monkeypatch, tmp_path)
+    registros = _registrar_status(celery_module, monkeypatch)
+    monkeypatch.setattr(celery_module, "concluir_job", lambda *args: False, raising=False)
+
+    with caplog.at_level("WARNING"):
+        resposta = celery_module.process_job.run(str(entrada), "job-a", {"logo": True})
+
+    assert resposta == {"status": "conclusao_recusada", "job_id": "job-a"}  # sem caminhos, sem "completed"
+    assert registros == [("job-a", "started", {})]  # nem failed por cima do estado oficial
+    assert "job-a" in caplog.text and "conclus" in caplog.text
+    _intactos(entrada, logo, pasta)
+
+
+def test_banco_fora_ao_concluir_propaga_sem_marcar_failed_nem_apagar(celery_module, monkeypatch, tmp_path):
+    entrada, logo, pasta = _job_gerado(celery_module, monkeypatch, tmp_path)
+    registros = _registrar_status(celery_module, monkeypatch)
+
+    def banco_fora(*args):
+        raise ConnectionError("banco indisponível")
+
+    monkeypatch.setattr(celery_module, "concluir_job", banco_fora, raising=False)
+    with pytest.raises(ConnectionError):
+        celery_module.process_job.run(str(entrada), "job-a", {"logo": True})
+
+    # Fica started com os 3 artefatos: a recuperação o trata como "artefatos_presentes" (revisão manual).
+    assert registros == [("job-a", "started", {})]
+    _intactos(entrada, logo, pasta)

@@ -141,3 +141,71 @@ def test_recuperacao_completa_contra_o_banco(jobs_isolados, tmp_path):
     assert recuperacao.recuperar_job_expirado(job_id, AGORA, tmp_path) == "nao_expirado"
     assert recuperacao.ler_job(job_id)["status"] == "failed"
     assert not entrada.exists()
+
+
+# ---- Conclusão condicional do Celery ------------------------------------------------
+
+CAMINHOS = ("/saida/x/mapa.pdf", "/saida/x/memorial.pdf", "/saida/x/resultado.json")
+
+
+def test_started_e_concluido(jobs_isolados):
+    job_id = _inserir()
+    assert db.concluir_job(job_id, *CAMINHOS) is True
+    job = recuperacao.ler_job(job_id)
+    assert job["status"] == "completed" and job["completed_at"] is not None
+    assert (job["mapa_path"], job["memorial_path"], job["resultado_path"]) == CAMINHOS
+
+
+def test_celery_atrasado_nao_ressuscita_job_marcado_failed(jobs_isolados):
+    job_id = _inserir()
+    assert db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO) is True  # recuperação venceu
+    antes = recuperacao.ler_job(job_id)
+    assert db.concluir_job(job_id, *CAMINHOS) is False
+    assert recuperacao.ler_job(job_id) == antes  # continua failed, sem caminhos
+
+
+def test_concluir_duas_vezes_e_idempotente(jobs_isolados):
+    job_id = _inserir()
+    assert db.concluir_job(job_id, *CAMINHOS) is True
+    antes = recuperacao.ler_job(job_id)
+    assert db.concluir_job(job_id, "/outro/mapa.pdf", "/outro/memorial.pdf", "/outro/resultado.json") is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+@pytest.mark.parametrize("status", ["queued", "inesperado"])
+def test_estado_inesperado_nao_e_promovido(jobs_isolados, status):
+    job_id = _inserir(status=status, started_at=None)
+    antes = recuperacao.ler_job(job_id)
+    assert db.concluir_job(job_id, *CAMINHOS) is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+def test_conclusao_so_afeta_o_proprio_job(jobs_isolados):
+    alvo, vizinho = _inserir(), _inserir()
+    antes = recuperacao.ler_job(vizinho)
+    assert db.concluir_job(alvo, *CAMINHOS) is True
+    assert recuperacao.ler_job(vizinho) == antes
+
+
+def test_recuperacao_e_conclusao_simultaneas_so_uma_vence(jobs_isolados):
+    for _ in range(5):
+        job_id = _inserir()
+        barreira = threading.Barrier(2)
+        resultados = {}
+
+        def recuperar():
+            barreira.wait()
+            resultados["recuperou"] = db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO)
+
+        def concluir():
+            barreira.wait()
+            resultados["concluiu"] = db.concluir_job(job_id, *CAMINHOS)
+
+        threads = [threading.Thread(target=recuperar), threading.Thread(target=concluir)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert sorted(resultados.values()) == [False, True]
+        status = recuperacao.ler_job(job_id)["status"]
+        assert status == ("failed" if resultados["recuperou"] else "completed")

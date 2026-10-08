@@ -299,3 +299,22 @@ def test_marcar_job_expirado_recusa_status_que_nao_expira(executed, status):
     with pytest.raises(ValueError):
         db.marcar_job_expirado("j-1", status, agora, agora, "job_expirado: x")
     assert executed == []
+
+
+# ---- Conclusão condicional: só started vira completed --------------------------
+
+
+def test_concluir_job_so_promove_quem_ainda_esta_started(monkeypatch):
+    log = _conexao_com_linha(monkeypatch, ("j-1",))
+    assert db.concluir_job("j-1", "/saida/j-1/mapa.pdf", "/saida/j-1/memorial.pdf", "/saida/j-1/resultado.json")
+    sql, params = log[-1]
+    assert sql == ("UPDATE jobs SET status = 'completed', mapa_path = %s, memorial_path = %s, resultado_path = %s, "
+                   "completed_at = %s WHERE id = %s AND status = 'started' RETURNING id")
+    assert params[:3] == ("/saida/j-1/mapa.pdf", "/saida/j-1/memorial.pdf", "/saida/j-1/resultado.json")
+    assert params[3].tzinfo is not None and params[4] == "j-1"
+
+
+def test_concluir_job_recusado_pelo_banco_e_false(executed):
+    assert db.concluir_job("j-1", "m", "me", "r") is False
+    (sql, _), = executed
+    assert "WHERE id = %s AND status = 'started'" in sql  # nunca um UPDATE sem filtro de job e status

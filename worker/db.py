@@ -146,6 +146,17 @@ def update_job(job_id: str, status: str, **fields: str | None) -> None:
         )
 
 
+def concluir_job(job_id: str, mapa_path: str, memorial_path: str, resultado_path: str) -> bool:
+    """completed só a partir de started: um job já failed (recuperação) ou completed não é sobrescrito."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE jobs SET status = 'completed', mapa_path = %s, memorial_path = %s, resultado_path = %s,
+               completed_at = %s WHERE id = %s AND status = 'started' RETURNING id""",
+            (mapa_path, memorial_path, resultado_path, datetime.now(timezone.utc), job_id),
+        )
+        return cur.fetchone() is not None
+
+
 # Marco que a regra de job preso usou para cada status; queued só expira enquanto não tem tarefa.
 _MARCO_EXPIRACAO = {
     "queued": "created_at = %s AND created_at < %s AND (task_id IS NULL OR task_id = '')",
