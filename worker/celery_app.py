@@ -40,8 +40,8 @@ def _ensure_process_qgis_session() -> None:
 @celery.task(name="geolume.process_job")
 def process_job(input_path: str, job_id: str, prancha: dict | None = None) -> dict[str, object]:
     # prancha é opcional: tarefas enfileiradas antes dela chegam só com (input_path, job_id).
-    update_job(job_id, "started")
     try:
+        update_job(job_id, "started")  # dentro do try: banco fora aqui também limpa os uploads
         _ensure_process_qgis_session()
         with qgis_session():
             resultado = run_job(Path(input_path), OUTPUT_DIR, job_id=job_id, prancha=prancha)

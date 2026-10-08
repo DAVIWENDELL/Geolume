@@ -79,3 +79,66 @@ def test_task_remove_uploads_quando_o_job_falha(celery_module, monkeypatch, tmp_
 
     assert not entrada.exists()
     assert not logo.exists()
+
+
+# ---- Status gravados no banco ---------------------------------------------
+
+
+def _registrar_status(celery_module, monkeypatch):
+    registros = []
+    monkeypatch.setattr(celery_module, "update_job", lambda job_id, status, **campos: registros.append(
+        (job_id, status, campos)))
+    return registros
+
+
+def test_task_marca_started_e_depois_completed_com_os_tres_artefatos(celery_module, monkeypatch):
+    registros = _registrar_status(celery_module, monkeypatch)
+    celery_module.process_job.run("/tmp/a.geojson", "job-a")
+    assert registros == [
+        ("job-a", "started", {}),
+        ("job-a", "completed", {"mapa_path": "/tmp/mapa.pdf", "memorial_path": "/tmp/memorial.pdf",
+                                "resultado_path": "/tmp/resultado.json"}),
+    ]
+
+
+def test_task_marca_started_e_depois_failed_com_o_erro(celery_module, monkeypatch, tmp_path):
+    from geolume_worker.errors import InvalidInputError
+
+    registros = _registrar_status(celery_module, monkeypatch)
+    monkeypatch.setattr(celery_module, "OUTPUT_DIR", tmp_path)
+
+    def falhar(*args, **kwargs):
+        raise InvalidInputError("sem_feicoes", "O GeoJSON não contém feições.")
+
+    monkeypatch.setattr(celery_module, "run_job", falhar)
+    with pytest.raises(InvalidInputError):
+        celery_module.process_job.run(str(tmp_path / "a.geojson"), "job-a")
+    assert registros == [
+        ("job-a", "started", {}),
+        ("job-a", "failed", {"erro": "sem_feicoes: O GeoJSON não contém feições."}),
+    ]
+
+
+def test_banco_fora_ao_marcar_started_nao_deixa_upload_nem_job_na_fila(celery_module, monkeypatch, tmp_path):
+    entrada = tmp_path / "inputs" / "job-a-lote.geojson"
+    entrada.parent.mkdir()
+    entrada.write_text("{}")
+    logo = tmp_path / "logos" / "job-a.png"
+    logo.parent.mkdir()
+    logo.write_bytes(b"logo")
+    monkeypatch.setattr(celery_module, "OUTPUT_DIR", tmp_path)
+    registros = []
+
+    def update_job(job_id, status, **campos):
+        registros.append(status)
+        if status == "started":
+            raise ConnectionError("banco indisponível")
+
+    monkeypatch.setattr(celery_module, "update_job", update_job)
+    with pytest.raises(ConnectionError):
+        celery_module.process_job.run(str(entrada), "job-a", {"logo": True})
+
+    assert registros == ["started", "failed"]  # tenta não deixar o job "queued" para sempre
+    assert celery_module.chamadas == []  # não processa um job que não conseguiu marcar
+    assert not entrada.exists()
+    assert not logo.exists()
