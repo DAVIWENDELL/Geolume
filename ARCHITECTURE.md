@@ -54,6 +54,8 @@ A API publica somente `127.0.0.1:8000` no Compose de desenvolvimento. `/health` 
 
 `worker/recuperacao.py` tem `recuperar_job_expirado(job_id, agora, output_dir)`, ainda sem scheduler nem endpoint que a chame. Aplica a regra; `started` expirado com `mapa.pdf`, `memorial.pdf` e `resultado.json` presentes não muda (revisão manual, nunca `completed` automático); nos demais casos marca `failed` com `db.marcar_job_expirado`, um único UPDATE condicionado ao status e ao marco (`created_at`/`started_at`) lidos, e só quem ganhou remove o GeoJSON `inputs/{job_id}-*` e a logo do job. Artefatos parciais ficam. O erro gravado é `job_expirado: …`, que a API mostra como a falha genérica. A leitura sem filtro de usuário (`ler_job`) fica nesse módulo, que a API não importa.
 
+`worker/diagnostico_jobs.py` é o comando manual de diagnóstico (`python3 diagnostico_jobs.py [--job-id ID ...] [--tenant T] [--agora ISO] [--saida DIR]`, no contêiner `api`). Só lê: a sessão do banco é `readonly` e o comando não chama a recuperação nem toca em arquivos. Sem `--job-id`, lê só jobs `queued` e `started`. Imprime JSON ordenado com, por job, `categoria` (`candidato_recuperacao`, `artefatos_presentes`, `nao_expirado`, `nao_recuperavel`, `nao_encontrado`), `motivo`, marco e idade usados na regra, presença dos 3 artefatos e dos uploads (GeoJSON e logo) e `tenant_id`; não inclui caminhos, `owner_id`, prancha nem erro. Com `--tenant`, outro tenant aparece como `nao_encontrado`. A API não importa o módulo.
+
 ### Persistência e arquivos
 
 - Volume PostgreSQL: `geolume-postgis`.

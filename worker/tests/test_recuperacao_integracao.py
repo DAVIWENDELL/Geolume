@@ -373,3 +373,54 @@ def test_api_e_celery_simultaneos_so_um_vence(jobs_isolados):
 def test_falhas_simultaneas_ao_enfileirar_so_uma_grava(jobs_isolados):
     job_id = _inserir(status="queued", task_id=None, started_at=None)
     assert _corrida(*[lambda: db.falhar_enfileiramento(job_id, ERRO_FILA)] * 8).count(True) == 1
+
+
+# ---- Diagnóstico somente leitura ---------------------------------------------------
+
+
+def _tabela():
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT md5(string_agg(t::text, ',' ORDER BY id)), count(*) FROM jobs t")
+        return cur.fetchone()
+
+
+def test_diagnostico_classifica_sem_alterar_o_banco(jobs_isolados, tmp_path):
+    import diagnostico_jobs
+
+    (tmp_path / "inputs").mkdir()
+    perdido = _inserir(status="queued", task_id=None, started_at=None, created_at=AGORA - timedelta(hours=1))
+    com_tarefa = _inserir(status="queued", started_at=None, created_at=AGORA - timedelta(hours=1))
+    expirado = _inserir()
+    concluido = _inserir(status="completed")
+    antes = _tabela()
+
+    rel = diagnostico_jobs.relatorio(AGORA, tmp_path)
+
+    assert _tabela() == antes
+    categorias = {j["id"]: j["categoria"] for j in rel["jobs"]}
+    assert categorias == {perdido: "candidato_recuperacao", com_tarefa: "nao_expirado",
+                          expirado: "candidato_recuperacao"}  # sem filtro: só queued e started
+    rel = diagnostico_jobs.relatorio(AGORA, tmp_path, job_ids=[concluido, "nada"])
+    assert [j["categoria"] for j in sorted(rel["jobs"], key=lambda j: j["id"] == "nada")] == [
+        "nao_recuperavel", "nao_encontrado"]
+    assert _tabela() == antes
+
+
+def test_diagnostico_por_tenant_nao_le_outro_tenant(jobs_isolados, tmp_path):
+    import diagnostico_jobs
+
+    nosso, alheio = _inserir(tenant_id="demo"), _inserir(tenant_id="outro")
+    rel = diagnostico_jobs.relatorio(AGORA, tmp_path, tenant="demo")
+    assert [j["id"] for j in rel["jobs"]] == [nosso]
+    rel = diagnostico_jobs.relatorio(AGORA, tmp_path, job_ids=[alheio], tenant="demo")
+    assert rel["jobs"] == [{"id": alheio, "categoria": "nao_encontrado"}]
+
+
+def test_sessao_do_diagnostico_recusa_escrita(jobs_isolados):
+    import diagnostico_jobs
+
+    job_id = _inserir(status="queued", started_at=None)
+    with pytest.raises(psycopg2.errors.ReadOnlySqlTransaction):
+        with diagnostico_jobs._conexao_leitura() as conn, conn.cursor() as cur:
+            cur.execute("UPDATE jobs SET status = 'failed' WHERE id = %s", (job_id,))
+    assert recuperacao.ler_job(job_id)["status"] == "queued"
