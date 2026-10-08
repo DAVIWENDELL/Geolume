@@ -55,3 +55,27 @@ def test_task_repassa_a_prancha_ao_job(celery_module):
     prancha = {"projeto": "Loteamento Sol", "logo": True}
     celery_module.process_job.run("/tmp/a.geojson", "job-a", prancha)
     assert celery_module.chamadas[-1]["prancha"] == prancha
+
+
+def test_task_remove_uploads_quando_o_job_falha(celery_module, monkeypatch, tmp_path):
+    from geolume_worker.errors import InvalidInputError
+
+
+    entrada = tmp_path / "inputs" / "job-a-lote.geojson"
+    entrada.parent.mkdir()
+    entrada.write_text("{}")
+    logo = tmp_path / "logos" / "job-a.png"
+    logo.parent.mkdir()
+    logo.write_bytes(b"logo")
+    monkeypatch.setattr(celery_module, "OUTPUT_DIR", tmp_path)
+
+    def falhar(*args, **kwargs):
+        raise InvalidInputError("json_invalido", "entrada inválida")
+
+    monkeypatch.setattr(celery_module, "run_job", falhar)
+
+    with pytest.raises(InvalidInputError):
+        celery_module.process_job.run(str(entrada), "job-a", {"logo": True})
+
+    assert not entrada.exists()
+    assert not logo.exists()

@@ -7,6 +7,7 @@ from pathlib import Path
 from celery import Celery
 
 from geolume_worker.job import run_job
+from geolume_worker.prancha import caminho_logo
 from geolume_worker.qgis_session import qgis_session
 from db import init_db, update_job
 
@@ -45,7 +46,11 @@ def process_job(input_path: str, job_id: str, prancha: dict | None = None) -> di
         with qgis_session():
             resultado = run_job(Path(input_path), OUTPUT_DIR, job_id=job_id, prancha=prancha)
     except Exception as exc:
-        update_job(job_id, "failed", erro=str(exc))
+        try:
+            update_job(job_id, "failed", erro=str(exc))
+        finally:
+            Path(input_path).unlink(missing_ok=True)
+            caminho_logo(OUTPUT_DIR, job_id).unlink(missing_ok=True)
         raise
     update_job(
         job_id,
