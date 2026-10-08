@@ -1,0 +1,143 @@
+"""UPDATE condicional contra o PostgreSQL real (contêiner api): GEOLUME_DB_INTEGRATION=1.
+
+Roda num schema temporário próprio (itest_*), com uma cópia vazia da estrutura de jobs, apagado
+no fim: nunca lê nem escreve em public.jobs.
+"""
+
+import os
+import threading
+import uuid
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+if os.environ.get("GEOLUME_DB_INTEGRATION") != "1":
+    pytest.skip("só com GEOLUME_DB_INTEGRATION=1 e banco real", allow_module_level=True)
+
+import psycopg2  # noqa: E402
+
+import db  # noqa: E402
+import recuperacao  # noqa: E402
+
+AGORA = datetime.now(timezone.utc)
+INICIO = AGORA - timedelta(hours=1)
+LIMITE = AGORA - timedelta(minutes=30)
+ERRO = "job_expirado: teste"
+
+
+@pytest.fixture
+def jobs_isolados(monkeypatch):
+    schema = f"itest_{uuid.uuid4().hex[:12]}"
+    db.init_db(retries=5)
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute(f"CREATE SCHEMA {schema}")
+        cur.execute(f"CREATE TABLE {schema}.jobs (LIKE public.jobs INCLUDING DEFAULTS)")
+    monkeypatch.setattr(db, "connect", lambda: psycopg2.connect(
+        db.DATABASE_URL, connect_timeout=5, options=f"-c search_path={schema}"))
+    yield schema
+    monkeypatch.undo()
+    assert schema.startswith("itest_")
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute(f"DROP SCHEMA {schema} CASCADE")
+
+
+def _inserir(status="started", task_id="t-1", started_at=INICIO, created_at=None, **extra):
+    job_id = uuid.uuid4().hex
+    campos = {"id": job_id, "task_id": task_id, "status": status, "input_filename": "lote.geojson",
+              "created_at": created_at or AGORA - timedelta(hours=2), "started_at": started_at, **extra}
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute(f"INSERT INTO jobs ({', '.join(campos)}) VALUES ({', '.join(['%s'] * len(campos))})",
+                    tuple(campos.values()))
+    return job_id
+
+
+def test_o_schema_isolado_nao_e_o_public(jobs_isolados):
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        assert cur.fetchone()[0] == jobs_isolados
+        cur.execute("SELECT count(*) FROM jobs")
+        assert cur.fetchone()[0] == 0
+
+
+def test_primeiro_adquire_e_o_segundo_nao(jobs_isolados):
+    job_id = _inserir()
+    assert db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO) is True
+    assert db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO) is False
+    job = recuperacao.ler_job(job_id)
+    assert job["status"] == "failed" and job["erro"] == ERRO and job["completed_at"] is not None
+
+
+def test_processos_simultaneos_so_um_adquire(jobs_isolados):
+    job_id = _inserir()
+    barreira = threading.Barrier(8)
+    resultados = []
+
+    def tentar():
+        barreira.wait()
+        resultados.append(db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO))
+
+    threads = [threading.Thread(target=tentar) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert resultados.count(True) == 1
+
+
+def test_status_alterado_depois_da_leitura_nao_e_sobrescrito(jobs_isolados):
+    job_id = _inserir()
+    db.update_job(job_id, "completed", mapa_path="/saida/x/mapa.pdf")  # o Celery terminou nesse meio-tempo
+    assert db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO) is False
+    job = recuperacao.ler_job(job_id)
+    assert job["status"] == "completed" and job["erro"] is None and job["mapa_path"] == "/saida/x/mapa.pdf"
+
+
+def test_started_at_alterado_depois_da_leitura_nao_e_sobrescrito(jobs_isolados):
+    job_id = _inserir()
+    db.update_job(job_id, "started")  # reentregue: novo início
+    assert db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO) is False
+    assert recuperacao.ler_job(job_id)["status"] == "started"
+
+
+def test_job_que_deixou_de_estar_expirado_nao_e_marcado(jobs_isolados):
+    recente = AGORA - timedelta(minutes=5)
+    job_id = _inserir(started_at=recente)
+    assert db.marcar_job_expirado(job_id, "started", recente, LIMITE, ERRO) is False
+    assert recuperacao.ler_job(job_id)["status"] == "started"
+
+
+def test_queued_que_ganhou_tarefa_nao_e_marcado(jobs_isolados):
+    criado = AGORA - timedelta(hours=1)
+    job_id = _inserir(status="queued", task_id=None, started_at=None, created_at=criado)
+    db.set_task_id(job_id, "t-tardia")
+    assert db.marcar_job_expirado(job_id, "queued", criado, AGORA - timedelta(minutes=10), ERRO) is False
+    assert recuperacao.ler_job(job_id)["status"] == "queued"
+
+
+def test_queued_sem_tarefa_expirado_e_marcado(jobs_isolados):
+    criado = AGORA - timedelta(hours=1)
+    job_id = _inserir(status="queued", task_id=None, started_at=None, created_at=criado)
+    assert db.marcar_job_expirado(job_id, "queued", criado, AGORA - timedelta(minutes=10), ERRO) is True
+    assert recuperacao.ler_job(job_id)["status"] == "failed"
+
+
+@pytest.mark.parametrize("status", ["completed", "failed"])
+def test_job_terminado_nunca_e_recuperado(jobs_isolados, status):
+    job_id = _inserir(status=status, erro="anterior" if status == "failed" else None)
+    antes = recuperacao.ler_job(job_id)
+    assert db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO) is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+def test_recuperacao_completa_contra_o_banco(jobs_isolados, tmp_path):
+    (tmp_path / "inputs").mkdir()
+    job_id = _inserir()
+    entrada = tmp_path / "inputs" / f"{job_id}-lote.geojson"
+    entrada.write_text("{}")
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE jobs SET input_path = %s WHERE id = %s", (str(entrada), job_id))
+
+    assert recuperacao.recuperar_job_expirado(job_id, AGORA, tmp_path) == "marcado_failed"
+    assert recuperacao.recuperar_job_expirado(job_id, AGORA, tmp_path) == "nao_expirado"
+    assert recuperacao.ler_job(job_id)["status"] == "failed"
+    assert not entrada.exists()

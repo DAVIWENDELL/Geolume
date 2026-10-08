@@ -146,6 +146,29 @@ def update_job(job_id: str, status: str, **fields: str | None) -> None:
         )
 
 
+# Marco que a regra de job preso usou para cada status; queued só expira enquanto não tem tarefa.
+_MARCO_EXPIRACAO = {
+    "queued": "created_at = %s AND created_at < %s AND (task_id IS NULL OR task_id = '')",
+    "started": "started_at = %s AND started_at < %s",
+}
+
+
+def marcar_job_expirado(job_id: str, status: str, marco: datetime, expirado_antes: datetime, erro: str) -> bool:
+    """Marca failed só se o job ainda estiver como foi lido (status e marco) e ainda expirado.
+
+    Um único UPDATE: o lock de linha serializa recuperadores simultâneos e só um recebe True.
+    """
+    if status not in _MARCO_EXPIRACAO:
+        raise ValueError(f"status que não expira: {status}")
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""UPDATE jobs SET status = 'failed', erro = %s, completed_at = %s
+               WHERE id = %s AND status = '{status}' AND {_MARCO_EXPIRACAO[status]} RETURNING id""",
+            (erro, datetime.now(timezone.utc), job_id, marco, expirado_antes),
+        )
+        return cur.fetchone() is not None
+
+
 def _access(user: dict) -> tuple[str, str, str]:
     return (user["tenant_id"], user["role"], user["user_id"])
 

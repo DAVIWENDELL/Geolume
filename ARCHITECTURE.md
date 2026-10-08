@@ -50,7 +50,9 @@ A API publica somente `127.0.0.1:8000` no Compose de desenvolvimento. `/health` 
 
 `worker/celery_app.py` registra `geolume.process_job`. Redis transporta a tarefa e o resultado. PostgreSQL registra usuário, sessão e estado do job. O processo Celery mantém uma sessão QGIS aberta; `process_job()` usa essa sessão e atualiza o job para `started` (gravando `started_at`), `completed` ou `failed`.
 
-`worker/jobs_presos.py` tem a regra pura de job preso, ainda sem rotina que a aplique: `queued` sem `task_id` há mais de 10 min é `enfileiramento_perdido`; `started` com `started_at` há mais de 30 min é `execucao_expirada`. `queued` com `task_id` e `started` sem `started_at` (jobs antigos) não são decididos. `started_at` não aparece na resposta pública.
+`worker/jobs_presos.py` tem a regra pura de job preso: `queued` sem `task_id` há mais de 10 min é `enfileiramento_perdido`; `started` com `started_at` há mais de 30 min é `execucao_expirada`. `queued` com `task_id` e `started` sem `started_at` (jobs antigos) não são decididos. `started_at` não aparece na resposta pública.
+
+`worker/recuperacao.py` tem `recuperar_job_expirado(job_id, agora, output_dir)`, ainda sem scheduler nem endpoint que a chame. Aplica a regra; `started` expirado com `mapa.pdf`, `memorial.pdf` e `resultado.json` presentes não muda (revisão manual, nunca `completed` automático); nos demais casos marca `failed` com `db.marcar_job_expirado`, um único UPDATE condicionado ao status e ao marco (`created_at`/`started_at`) lidos, e só quem ganhou remove o GeoJSON `inputs/{job_id}-*` e a logo do job. Artefatos parciais ficam. O erro gravado é `job_expirado: …`, que a API mostra como a falha genérica. A leitura sem filtro de usuário (`ler_job`) fica nesse módulo, que a API não importa.
 
 ### Persistência e arquivos
 

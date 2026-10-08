@@ -231,3 +231,71 @@ def test_update_job_terminal_nao_mexe_em_started_at(executed, status):
     sql, _ = executed[-1]
     assert "started_at" not in sql
     assert "completed_at = %s" in sql
+
+
+# ---- Recuperação de job expirado: UPDATE condicional ---------------------------
+
+
+class CursorComLinha(FakeCursor):
+    def __init__(self, log, linha):
+        super().__init__(log)
+        self.linha = linha
+
+    def fetchone(self):
+        return self.linha
+
+
+def _conexao_com_linha(monkeypatch, linha):
+    log = []
+
+    class Conn(FakeConn):
+        def cursor(self, **kwargs):
+            return CursorComLinha(self.log, linha)
+
+    monkeypatch.setattr(db, "connect", lambda: Conn(log))
+    return log
+
+
+def test_marcar_started_expirado_so_se_status_e_started_at_forem_os_lidos(monkeypatch):
+    from datetime import datetime, timezone
+
+    log = _conexao_com_linha(monkeypatch, ("j-1",))
+    inicio = datetime(2026, 10, 8, 10, 0, tzinfo=timezone.utc)
+    limite = datetime(2026, 10, 8, 11, 30, tzinfo=timezone.utc)
+    assert db.marcar_job_expirado("j-1", "started", inicio, limite, "job_expirado: x") is True
+    sql, params = log[-1]
+    assert sql.startswith("UPDATE jobs SET status = 'failed', erro = %s, completed_at = %s WHERE id = %s")
+    assert "AND status = 'started' AND started_at = %s AND started_at < %s" in sql
+    assert sql.endswith("RETURNING id")
+    assert params[0] == "job_expirado: x" and params[1].tzinfo is not None
+    assert params[2:] == ("j-1", inicio, limite)
+
+
+def test_marcar_queued_expirado_exige_created_at_lido_e_ainda_sem_tarefa(monkeypatch):
+    from datetime import datetime, timezone
+
+    log = _conexao_com_linha(monkeypatch, ("j-1",))
+    criado = datetime(2026, 9, 28, 21, 0, tzinfo=timezone.utc)
+    limite = datetime(2026, 10, 8, 11, 50, tzinfo=timezone.utc)
+    assert db.marcar_job_expirado("j-1", "queued", criado, limite, "job_expirado: y") is True
+    sql, params = log[-1]
+    assert "AND status = 'queued' AND created_at = %s AND created_at < %s" in sql
+    assert "AND (task_id IS NULL OR task_id = '')" in sql
+    assert params[2:] == ("j-1", criado, limite)
+
+
+def test_marcar_job_expirado_sem_linha_atualizada_e_false(executed):
+    from datetime import datetime, timezone
+
+    agora = datetime(2026, 10, 8, 12, 0, tzinfo=timezone.utc)
+    assert db.marcar_job_expirado("j-1", "started", agora, agora, "job_expirado: x") is False
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "desconhecido"])
+def test_marcar_job_expirado_recusa_status_que_nao_expira(executed, status):
+    from datetime import datetime, timezone
+
+    agora = datetime(2026, 10, 8, 12, 0, tzinfo=timezone.utc)
+    with pytest.raises(ValueError):
+        db.marcar_job_expirado("j-1", status, agora, agora, "job_expirado: x")
+    assert executed == []
