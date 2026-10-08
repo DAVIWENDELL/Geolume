@@ -146,6 +146,38 @@ def update_job(job_id: str, status: str, **fields: str | None) -> None:
         )
 
 
+def iniciar_job(job_id: str) -> bool:
+    """started só a partir de queued: job já recuperado (failed), completed ou já started não é retomado."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE jobs SET status = 'started', started_at = %s WHERE id = %s AND status = 'queued' RETURNING id",
+            (datetime.now(timezone.utc), job_id),
+        )
+        return cur.fetchone() is not None
+
+
+def falhar_job(job_id: str, erro: str) -> bool:
+    """failed só a partir de started: a primeira causa gravada (ex.: job_expirado) não é sobrescrita."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE jobs SET status = 'failed', erro = %s, completed_at = %s
+               WHERE id = %s AND status = 'started' RETURNING id""",
+            (erro, datetime.now(timezone.utc), job_id),
+        )
+        return cur.fetchone() is not None
+
+
+def falhar_enfileiramento(job_id: str, erro: str) -> bool:
+    """failed da API só a partir de queued: o Celery pode já ter iniciado ou concluído o job."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE jobs SET status = 'failed', erro = %s, completed_at = %s
+               WHERE id = %s AND status = 'queued' RETURNING id""",
+            (erro, datetime.now(timezone.utc), job_id),
+        )
+        return cur.fetchone() is not None
+
+
 def concluir_job(job_id: str, mapa_path: str, memorial_path: str, resultado_path: str) -> bool:
     """completed só a partir de started: um job já failed (recuperação) ou completed não é sobrescrito."""
     with connect() as conn, conn.cursor() as cur:

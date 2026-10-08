@@ -40,7 +40,7 @@ def api(monkeypatch, tmp_path):
     efeitos = SimpleNamespace(jobs=[], filas=[], saida=saida)
     monkeypatch.setattr(module, "create_db_job", lambda *a, **k: efeitos.jobs.append((a, k)))
     monkeypatch.setattr(module, "set_task_id", lambda *a: None)
-    monkeypatch.setattr(module, "update_job", lambda *a, **k: None)
+    monkeypatch.setattr(module, "falhar_enfileiramento", lambda *a, **k: True, raising=False)
 
     def delay(*args):
         efeitos.filas.append(args)

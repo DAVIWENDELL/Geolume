@@ -209,3 +209,167 @@ def test_recuperacao_e_conclusao_simultaneas_so_uma_vence(jobs_isolados):
         assert sorted(resultados.values()) == [False, True]
         status = recuperacao.ler_job(job_id)["status"]
         assert status == ("failed" if resultados["recuperou"] else "completed")
+
+
+# ---- started e failed condicionais do Celery -------------------------------------
+
+ERRO_CELERY = "sem_feicoes: O GeoJSON não contém feições."
+
+
+def test_queued_e_iniciado(jobs_isolados):
+    job_id = _inserir(status="queued", started_at=None)
+    assert db.iniciar_job(job_id) is True
+    job = recuperacao.ler_job(job_id)
+    assert job["status"] == "started" and job["started_at"] is not None
+
+
+def test_started_e_falhado(jobs_isolados):
+    job_id = _inserir()
+    assert db.falhar_job(job_id, ERRO_CELERY) is True
+    job = recuperacao.ler_job(job_id)
+    assert job["status"] == "failed" and job["erro"] == ERRO_CELERY and job["completed_at"] is not None
+
+
+def test_tarefa_atrasada_nao_ressuscita_job_recuperado(jobs_isolados):
+    criado = AGORA - timedelta(hours=1)
+    job_id = _inserir(status="queued", task_id=None, started_at=None, created_at=criado)
+    assert db.marcar_job_expirado(job_id, "queued", criado, AGORA - timedelta(minutes=10), ERRO) is True
+    antes = recuperacao.ler_job(job_id)
+    assert db.iniciar_job(job_id) is False
+    assert recuperacao.ler_job(job_id) == antes  # continua failed, com job_expirado e sem started_at
+
+
+def test_falha_tardia_preserva_job_expirado(jobs_isolados):
+    job_id = _inserir()
+    assert db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO) is True
+    antes = recuperacao.ler_job(job_id)
+    assert db.falhar_job(job_id, ERRO_CELERY) is False
+    assert recuperacao.ler_job(job_id) == antes and antes["erro"] == ERRO  # a primeira causa fica
+
+
+def test_segunda_falha_nao_troca_a_causa(jobs_isolados):
+    job_id = _inserir()
+    assert db.falhar_job(job_id, ERRO_CELERY) is True
+    antes = recuperacao.ler_job(job_id)
+    assert db.falhar_job(job_id, "outra: causa") is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+@pytest.mark.parametrize("status", ["failed", "completed"])
+def test_job_terminado_nao_e_iniciado_nem_falhado(jobs_isolados, status):
+    job_id = _inserir(status=status, erro="anterior" if status == "failed" else None)
+    antes = recuperacao.ler_job(job_id)
+    assert db.iniciar_job(job_id) is False
+    assert db.falhar_job(job_id, ERRO_CELERY) is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+def test_job_ja_started_nao_e_reiniciado(jobs_isolados):
+    job_id = _inserir()  # mensagem reentregue: não reabre o início nem roda de novo
+    antes = recuperacao.ler_job(job_id)
+    assert db.iniciar_job(job_id) is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+def test_job_queued_nao_e_falhado_pelo_celery(jobs_isolados):
+    # Banco caiu ao marcar started: o failed seguinte não pula de queued para failed.
+    job_id = _inserir(status="queued", started_at=None)
+    antes = recuperacao.ler_job(job_id)
+    assert db.falhar_job(job_id, ERRO_CELERY) is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+def test_inicio_e_falha_so_afetam_o_proprio_job(jobs_isolados):
+    alvo, vizinho_queued, vizinho_started = (_inserir(status="queued", started_at=None),
+                                             _inserir(status="queued", started_at=None), _inserir())
+    antes = [recuperacao.ler_job(v) for v in (vizinho_queued, vizinho_started)]
+    assert db.iniciar_job(alvo) is True
+    assert db.falhar_job(alvo, ERRO_CELERY) is True
+    assert [recuperacao.ler_job(v) for v in (vizinho_queued, vizinho_started)] == antes
+
+
+def _corrida(*funcoes):
+    barreira = threading.Barrier(len(funcoes))
+    resultados = [None] * len(funcoes)
+
+    def rodar(i, funcao):
+        barreira.wait()
+        resultados[i] = funcao()
+
+    threads = [threading.Thread(target=rodar, args=(i, f)) for i, f in enumerate(funcoes)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return resultados
+
+
+def test_entregas_simultaneas_so_uma_inicia(jobs_isolados):
+    job_id = _inserir(status="queued", started_at=None)
+    assert _corrida(*[lambda: db.iniciar_job(job_id)] * 8).count(True) == 1
+
+
+def test_recuperacao_e_inicio_simultaneos_so_um_vence(jobs_isolados):
+    criado = AGORA - timedelta(hours=1)
+    for _ in range(5):
+        job_id = _inserir(status="queued", task_id=None, started_at=None, created_at=criado)
+        recuperou, iniciou = _corrida(
+            lambda: db.marcar_job_expirado(job_id, "queued", criado, AGORA - timedelta(minutes=10), ERRO),
+            lambda: db.iniciar_job(job_id))
+        assert sorted([recuperou, iniciou]) == [False, True]
+        assert recuperacao.ler_job(job_id)["status"] == ("failed" if recuperou else "started")
+
+
+def test_recuperacao_e_falha_simultaneas_preservam_a_causa_de_quem_venceu(jobs_isolados):
+    for _ in range(5):
+        job_id = _inserir()
+        recuperou, falhou = _corrida(lambda: db.marcar_job_expirado(job_id, "started", INICIO, LIMITE, ERRO),
+                                     lambda: db.falhar_job(job_id, ERRO_CELERY))
+        assert sorted([recuperou, falhou]) == [False, True]
+        job = recuperacao.ler_job(job_id)
+        assert job["status"] == "failed" and job["erro"] == (ERRO if recuperou else ERRO_CELERY)
+
+
+# ---- failed da API ao falhar o enfileiramento --------------------------------------
+
+ERRO_FILA = "Falha ao enfileirar o job."
+
+
+def test_falha_ao_enfileirar_com_job_ainda_queued(jobs_isolados):
+    job_id = _inserir(status="queued", task_id=None, started_at=None)
+    assert db.falhar_enfileiramento(job_id, ERRO_FILA) is True
+    job = recuperacao.ler_job(job_id)
+    assert job["status"] == "failed" and job["erro"] == ERRO_FILA and job["completed_at"] is not None
+
+
+@pytest.mark.parametrize("status", ["started", "completed", "failed"])
+def test_falha_ao_enfileirar_nao_sobrescreve_quem_ja_decidiu(jobs_isolados, status):
+    extra = {"erro": ERRO} if status == "failed" else {"mapa_path": CAMINHOS[0]} if status == "completed" else {}
+    job_id = _inserir(status=status, **extra)
+    antes = recuperacao.ler_job(job_id)
+    assert db.falhar_enfileiramento(job_id, ERRO_FILA) is False
+    assert recuperacao.ler_job(job_id) == antes
+
+
+def test_falha_ao_enfileirar_so_afeta_o_proprio_job(jobs_isolados):
+    alvo = _inserir(status="queued", task_id=None, started_at=None)
+    vizinho = _inserir(status="queued", task_id=None, started_at=None)
+    antes = recuperacao.ler_job(vizinho)
+    assert db.falhar_enfileiramento(alvo, ERRO_FILA) is True
+    assert recuperacao.ler_job(vizinho) == antes
+
+
+def test_api_e_celery_simultaneos_so_um_vence(jobs_isolados):
+    # delay() já entregou a mensagem e set_task_id falhou: a API tenta failed enquanto o Celery tenta started.
+    for _ in range(5):
+        job_id = _inserir(status="queued", task_id=None, started_at=None)
+        falhou, iniciou = _corrida(lambda: db.falhar_enfileiramento(job_id, ERRO_FILA),
+                                   lambda: db.iniciar_job(job_id))
+        assert sorted([falhou, iniciou]) == [False, True]
+        job = recuperacao.ler_job(job_id)
+        assert (job["status"], job["erro"]) == (("failed", ERRO_FILA) if falhou else ("started", None))
+
+
+def test_falhas_simultaneas_ao_enfileirar_so_uma_grava(jobs_isolados):
+    job_id = _inserir(status="queued", task_id=None, started_at=None)
+    assert _corrida(*[lambda: db.falhar_enfileiramento(job_id, ERRO_FILA)] * 8).count(True) == 1

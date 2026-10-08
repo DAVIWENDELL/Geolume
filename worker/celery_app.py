@@ -10,7 +10,7 @@ from celery import Celery
 from geolume_worker.job import run_job
 from geolume_worker.prancha import caminho_logo
 from geolume_worker.qgis_session import qgis_session
-from db import concluir_job, init_db, update_job
+from db import concluir_job, falhar_job, iniciar_job, init_db
 
 BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/1")
 RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
@@ -44,13 +44,19 @@ def _ensure_process_qgis_session() -> None:
 def process_job(input_path: str, job_id: str, prancha: dict | None = None) -> dict[str, object]:
     # prancha é opcional: tarefas enfileiradas antes dela chegam só com (input_path, job_id).
     try:
-        update_job(job_id, "started")  # dentro do try: banco fora aqui também limpa os uploads
+        # Dentro do try: banco fora aqui também limpa os uploads (o failed seguinte é recusado: job não está started).
+        if not iniciar_job(job_id):
+            # Job já decidido (ex.: recuperação o marcou failed) ou já iniciado: não processa nem apaga nada.
+            logger.warning("job %s não estava em queued; início recusado, nada processado", job_id)
+            return {"status": "inicio_recusado", "job_id": job_id}
         _ensure_process_qgis_session()
         with qgis_session():
             resultado = run_job(Path(input_path), OUTPUT_DIR, job_id=job_id, prancha=prancha)
     except Exception as exc:
         try:
-            update_job(job_id, "failed", erro=str(exc))
+            if not falhar_job(job_id, str(exc)):
+                # A primeira causa gravada (ex.: job_expirado) vale; esta falha fica só no log.
+                logger.warning("job %s não estava em started; falha recusada, causa anterior mantida", job_id)
         finally:
             Path(input_path).unlink(missing_ok=True)
             caminho_logo(OUTPUT_DIR, job_id).unlink(missing_ok=True)

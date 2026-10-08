@@ -318,3 +318,53 @@ def test_concluir_job_recusado_pelo_banco_e_false(executed):
     assert db.concluir_job("j-1", "m", "me", "r") is False
     (sql, _), = executed
     assert "WHERE id = %s AND status = 'started'" in sql  # nunca um UPDATE sem filtro de job e status
+
+
+# ---- started e failed condicionais: a primeira decisão gravada vale ------------
+
+
+def test_iniciar_job_so_a_partir_de_queued(monkeypatch):
+    log = _conexao_com_linha(monkeypatch, ("j-1",))
+    assert db.iniciar_job("j-1") is True
+    sql, params = log[-1]
+    assert sql == "UPDATE jobs SET status = 'started', started_at = %s WHERE id = %s AND status = 'queued' RETURNING id"
+    assert params[0].tzinfo is not None and params[1] == "j-1"
+
+
+def test_iniciar_job_recusado_pelo_banco_e_false(executed):
+    assert db.iniciar_job("j-1") is False
+    (sql, _), = executed
+    assert "WHERE id = %s AND status = 'queued'" in sql
+
+
+def test_falhar_job_so_a_partir_de_started(monkeypatch):
+    log = _conexao_com_linha(monkeypatch, ("j-1",))
+    assert db.falhar_job("j-1", "sem_feicoes: vazio") is True
+    sql, params = log[-1]
+    assert sql == ("UPDATE jobs SET status = 'failed', erro = %s, completed_at = %s "
+                   "WHERE id = %s AND status = 'started' RETURNING id")
+    assert params[0] == "sem_feicoes: vazio" and params[1].tzinfo is not None and params[2] == "j-1"
+
+
+def test_falhar_job_recusado_pelo_banco_e_false(executed):
+    assert db.falhar_job("j-1", "x") is False
+    (sql, _), = executed
+    assert "WHERE id = %s AND status = 'started'" in sql  # nunca sobrescreve um failed (ex.: job_expirado)
+
+
+# ---- failed da API ao falhar o enfileiramento: só a partir de queued -----------
+
+
+def test_falhar_enfileiramento_so_a_partir_de_queued(monkeypatch):
+    log = _conexao_com_linha(monkeypatch, ("j-1",))
+    assert db.falhar_enfileiramento("j-1", "Falha ao enfileirar o job.") is True
+    sql, params = log[-1]
+    assert sql == ("UPDATE jobs SET status = 'failed', erro = %s, completed_at = %s "
+                   "WHERE id = %s AND status = 'queued' RETURNING id")
+    assert params[0] == "Falha ao enfileirar o job." and params[1].tzinfo is not None and params[2] == "j-1"
+
+
+def test_falhar_enfileiramento_recusado_pelo_banco_e_false(executed):
+    assert db.falhar_enfileiramento("j-1", "x") is False
+    (sql, _), = executed
+    assert "WHERE id = %s AND status = 'queued'" in sql  # nunca sobrescreve started, completed ou failed

@@ -39,6 +39,7 @@ from db import (
     create_job as create_db_job,
     create_session,
     delete_session,
+    falhar_enfileiramento,
     get_job_for,
     get_session_user,
     get_user_by_email,
@@ -47,7 +48,6 @@ from db import (
     reset_login_failures,
     set_task_id,
     touch_session,
-    update_job,
 )
 from geolume_worker.camadas import catalogo_publico
 from geolume_worker.errors import InvalidInputError
@@ -464,13 +464,18 @@ async def enqueue_job(
     except Exception as exc:
         # Sem banco ou sem fila: nada de arquivo órfão nem job "na fila" que nunca roda.
         logger.exception("job %s não foi enfileirado", job_id)
-        entrada.unlink(missing_ok=True)
-        destino_logo.unlink(missing_ok=True)
+        limpar = True
         if registrado:
             try:
-                update_job(job_id, "failed", erro="Falha ao enfileirar o job.")
+                if not falhar_enfileiramento(job_id, "Falha ao enfileirar o job."):
+                    # A mensagem saiu e o Celery já decidiu o job: o estado e os uploads são dele.
+                    logger.warning("job %s não estava em queued; falha ao enfileirar não gravada", job_id)
+                    limpar = False
             except Exception:
                 logger.exception("job %s ficou sem marcar a falha", job_id)
+        if limpar:
+            entrada.unlink(missing_ok=True)
+            destino_logo.unlink(missing_ok=True)
         raise HTTPException(status_code=503, detail="Não foi possível enfileirar o job. Tente novamente.") from exc
     return {"status": "queued", "job_id": job_id, "task_id": task.id}
 

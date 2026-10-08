@@ -296,22 +296,69 @@ def test_lista_de_codigos_cobre_todo_erro_de_validacao_do_worker(api):
 # ---- Falha depois da cópia (revisão Codex) --------------------------------
 
 
-@pytest.mark.parametrize("etapa", ["create_db_job", "delay", "set_task_id"])
-def test_falha_ao_registrar_ou_enfileirar_nao_deixa_arquivo_nem_job_pendente(api, monkeypatch, etapa):
-    atualizados = []
-    monkeypatch.setattr(api, "update_job", lambda job_id, status, **campos: atualizados.append(status), raising=False)
+def _falha_em(api, monkeypatch, etapa):
     alvo = api.process_job if etapa == "delay" else api
 
     def quebra(*a, **k):
         raise RuntimeError("redis://redis:6379 recusou a conexão em /app/celery_app.py")
 
     monkeypatch.setattr(alvo, etapa, quebra)
+
+
+def _registrar_falhas(api, monkeypatch, venceu=True):
+    """Registra o failed condicional pedido pela API; venceu = o job ainda estava queued."""
+    falhas = []
+
+    def falhar_enfileiramento(job_id, erro):
+        falhas.append(erro)
+        return venceu
+
+    monkeypatch.setattr(api, "falhar_enfileiramento", falhar_enfileiramento, raising=False)
+    return falhas
+
+
+@pytest.mark.parametrize("etapa", ["create_db_job", "delay", "set_task_id"])
+def test_falha_ao_registrar_ou_enfileirar_nao_deixa_arquivo_nem_job_pendente(api, monkeypatch, etapa):
+    falhas = _registrar_falhas(api, monkeypatch)
+    _falha_em(api, monkeypatch, etapa)
     status, corpo, _ = chamar(api, "/jobs/async", *multipart(b"{}"))
     assert status == 503
     assert corpo == {"detail": "Não foi possível enfileirar o job. Tente novamente."}
     assert list(api.efeitos.inputs.iterdir()) == []
-    # Job já registrado não fica "na fila" para sempre: vira falha.
-    assert atualizados == ([] if etapa == "create_db_job" else ["failed"])
+    # Job já registrado não fica "na fila" para sempre: vira falha, só pelo UPDATE condicional.
+    assert falhas == ([] if etapa == "create_db_job" else ["Falha ao enfileirar o job."])
+
+
+@pytest.mark.parametrize("etapa", ["delay", "set_task_id"])
+def test_job_ja_mudado_por_outro_processo_e_preservado(api, monkeypatch, caplog, etapa):
+    # Ex.: a mensagem saiu e o Celery já marcou started (ou concluiu) antes de set_task_id falhar.
+    falhas = _registrar_falhas(api, monkeypatch, venceu=False)
+    _falha_em(api, monkeypatch, etapa)
+    with caplog.at_level("WARNING"):
+        status, corpo, _ = chamar(api, "/jobs/async", *multipart(b"{}"))
+    assert (status, corpo) == (503, {"detail": "Não foi possível enfileirar o job. Tente novamente."})
+    assert falhas == ["Falha ao enfileirar o job."]
+    assert "não estava em queued" in caplog.text
+    # O upload é do job que outro processo assumiu: não é apagado debaixo dele.
+    assert [p.name.endswith("-lote.geojson") for p in api.efeitos.inputs.iterdir()] == [True]
+
+
+def test_banco_fora_ao_marcar_failed_limpa_e_responde_503(api, monkeypatch, caplog):
+    def banco_fora(job_id, erro):
+        raise ConnectionError("banco indisponível")
+
+    monkeypatch.setattr(api, "falhar_enfileiramento", banco_fora, raising=False)
+    _falha_em(api, monkeypatch, "set_task_id")
+    with caplog.at_level("ERROR"):
+        status, corpo, _ = chamar(api, "/jobs/async", *multipart(b"{}"))
+    assert (status, corpo) == (503, {"detail": "Não foi possível enfileirar o job. Tente novamente."})
+    assert "ficou sem marcar a falha" in caplog.text
+    # Job fica queued sem task_id: a regra de job preso o decide (enfileiramento_perdido).
+    assert list(api.efeitos.inputs.iterdir()) == []
+
+
+def test_api_nao_grava_status_sem_condicao(api):
+    assert not hasattr(api, "update_job")
 
 
 # ---- Upload sem sessão: 401 antes de ler o corpo ----------------------------
