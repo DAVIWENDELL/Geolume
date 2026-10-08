@@ -201,3 +201,33 @@ def test_get_session_user_junta_usuario(executed):
     for coluna in ("s.user_id", "s.last_seen_at", "s.expires_at", "u.email", "u.tenant_id", "u.role", "u.active"):
         assert coluna in sql
     assert params == ("h1",)
+
+
+# ---- started_at: início real da execução (regra de job preso) ----------------
+
+
+def test_init_db_adiciona_started_at_sem_preencher_jobs_antigos(executed):
+    db.init_db(retries=1)
+    corpo = " ".join(sql for sql, _ in executed)
+    assert "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ" in corpo
+    assert not [sql for sql, _ in executed if "SET started_at" in sql]  # legado fica nulo, não inventa início
+
+
+def test_update_job_started_grava_started_at(executed):
+    db.update_job("j-1", "started")
+    sql, params = executed[-1]
+    assert sql.startswith("UPDATE jobs SET ") and sql.endswith(" WHERE id = %s")
+    campos = dict(zip([c.split(" = ")[0] for c in sql[len("UPDATE jobs SET "):-len(" WHERE id = %s")].split(", ")],
+                      params))
+    assert campos["status"] == "started"
+    assert campos["started_at"].tzinfo is not None
+    assert "completed_at" not in campos
+    assert params[-1] == "j-1"
+
+
+@pytest.mark.parametrize("status", ["completed", "failed"])
+def test_update_job_terminal_nao_mexe_em_started_at(executed, status):
+    db.update_job("j-1", status)
+    sql, _ = executed[-1]
+    assert "started_at" not in sql
+    assert "completed_at = %s" in sql

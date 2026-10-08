@@ -64,6 +64,8 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS owner_id TEXT REFERENCES users(id);
 CREATE INDEX IF NOT EXISTS jobs_tenant_owner_idx ON jobs (tenant_id, owner_id, created_at DESC);
 -- Opções da prancha (mapa.pdf); nulo = prancha padrão, inclusive nos jobs antigos.
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS prancha JSONB;
+-- Início real da execução (regra de job preso); nulo nos jobs antigos, sem backfill.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 """
 
 # Jobs anteriores à autenticação entram no tenant demo e ficam sem dono:
@@ -132,6 +134,8 @@ def update_job(job_id: str, status: str, **fields: str | None) -> None:
     allowed = {"mapa_path", "memorial_path", "resultado_path", "erro", "completed_at"}
     updates = {key: value for key, value in fields.items() if key in allowed}
     updates["status"] = status
+    if status == "started":
+        updates["started_at"] = datetime.now(timezone.utc)
     if status in {"completed", "failed"}:
         updates["completed_at"] = datetime.now(timezone.utc)
     assignments = ", ".join(f"{key} = %s" for key in updates)

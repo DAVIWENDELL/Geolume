@@ -19,6 +19,7 @@
 - 2026-10-06 — Marca de autoria no `mapa.pdf`: todo mapa traz o símbolo oficial local do GeoLume (`worker/web/assets/geolume-marca-transparente.png`, o mesmo arquivo da tela) e o texto "Gerado pelo GeoLume", no rodapé da coluna direita, alinhados à base do quadro de fontes. É identificação visual de procedência do sistema, não selo técnico, certificação, aprovação, CREA nem garantia de precisão; o PDF não deve ganhar textos desse tipo. Independe da logo enviada pelo cliente (canto superior direito). Alternativas rejeitadas: selo técnico ou marca inventada sem arquivo autorizado; cópia reduzida da logo (o arquivo oficial é embutido inteiro e o `mapa.pdf` passou de ~24 KB para ~234 KB, aceito no MVP). Coberto por `worker/tests/test_layout_autoria.py`; API, prancha, `memorial.pdf` e `resultado.json` não mudaram.
 - 2026-10-08 — Validação de coordenadas: o OGR, ao ler um GeoJSON com membro `crs` que não reconhece, cai em EPSG:4326 sem avisar e, para `"type": "link"`, tenta baixar o `href` (requisição de saída controlada pelo cliente). Por isso o `crs` declarado é conferido no JSON bruto antes de abrir o OGR; só EPSG:4326/4674 (nome ou URN) e a URN CRS84 1.3 passam. A cobertura UTM é conferida em cada vértice; o centroide continua escolhendo o fuso. Código novo `coordenada_invalida` para latitude/longitude impossíveis. `OGC:CRS84` segue recusado, como antes.
 - 2026-10-08 — A API roda uvicorn sem `--reload` e o Celery carrega o código só ao iniciar: depois de mudar `worker/` (inclusive `CODIGOS_DE_VALIDACAO`), reinicie `api` e `celery` (`docker compose restart api celery`). Visto na validação do fluxo assíncrono: a API antiga mostrava "Falha no processamento do job." para um `coordenada_invalida` já gravado corretamente no banco.
+- 2026-10-08 — Job preso: `created_at` não mede execução (há jobs reais concluídos 19 h depois de criados, por espera na fila com o Celery parado), por isso existe `started_at`, gravado por `update_job(..., "started")`, sem backfill nos antigos. A regra (`worker/jobs_presos.py`) só decide com critério verificável no registro: `queued` sem `task_id` > 10 min e `started` com `started_at` > 30 min. `queued` com `task_id` fica indeciso porque a mensagem pode estar no Redis. A recuperação automática futura não pode marcar `failed` sem antes conferir os artefatos (`resultado.json` é gravado por último) e precisa de UPDATE condicional ao status/`started_at` lidos.
 
 ## Fatos verificados no repositório
 
@@ -35,7 +36,7 @@ A memória compartilhada foi consultada antes da documentação. Ela contém not
 
 ## Pendências conhecidas
 
-- Existem referências históricas a jobs que ficaram presos em `started` durante uma falha anterior; investigar antes de criar rotina de recuperação.
+- Existem referências históricas a jobs que ficaram presos em `started` durante uma falha anterior. Em 2026-10-08 o banco local não tinha nenhum `started`; o único preso era `abc` (`queued`, sem `task_id`).
 - Ainda faltam validação com clientes, arquivos reais maiores, concorrência e definição de requisitos profissionais do memorial.
 - KML, Shapefile, clientes, imóveis, multi-tenancy de produção e billing não devem ser tratados como implementados.
 

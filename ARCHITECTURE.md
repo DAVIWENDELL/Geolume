@@ -48,7 +48,9 @@ A API publica somente `127.0.0.1:8000` no Compose de desenvolvimento. `/health` 
 
 ### Execução assíncrona
 
-`worker/celery_app.py` registra `geolume.process_job`. Redis transporta a tarefa e o resultado. PostgreSQL registra usuário, sessão e estado do job. O processo Celery mantém uma sessão QGIS aberta; `process_job()` usa essa sessão e atualiza o job para `started`, `completed` ou `failed`.
+`worker/celery_app.py` registra `geolume.process_job`. Redis transporta a tarefa e o resultado. PostgreSQL registra usuário, sessão e estado do job. O processo Celery mantém uma sessão QGIS aberta; `process_job()` usa essa sessão e atualiza o job para `started` (gravando `started_at`), `completed` ou `failed`.
+
+`worker/jobs_presos.py` tem a regra pura de job preso, ainda sem rotina que a aplique: `queued` sem `task_id` há mais de 10 min é `enfileiramento_perdido`; `started` com `started_at` há mais de 30 min é `execucao_expirada`. `queued` com `task_id` e `started` sem `started_at` (jobs antigos) não são decididos. `started_at` não aparece na resposta pública.
 
 ### Persistência e arquivos
 
