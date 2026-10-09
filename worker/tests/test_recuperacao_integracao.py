@@ -489,3 +489,61 @@ def test_cli_aplicacoes_simultaneas_so_uma_marca(jobs_isolados, tmp_path):
         assert resultados.count("marcado_failed") == 1
         assert set(resultados) <= {"marcado_failed", "outro_processo", "nao_expirado"}
         assert recuperacao.ler_job(job_id)["status"] == "failed"
+
+
+def test_plano_de_retencao_classifica_sem_alterar_o_banco(jobs_isolados, tmp_path):
+    import retencao
+
+    (tmp_path / "inputs").mkdir()
+    entrada = tmp_path / "inputs" / "x-lote.geojson"
+    falho = _inserir(status="failed", completed_at=AGORA - timedelta(days=31))
+    entrada = entrada.with_name(f"{falho}-lote.geojson")
+    entrada.write_text("{}")
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE jobs SET input_path = %s WHERE id = %s", (str(entrada), falho))
+    recente = _inserir(status="failed", completed_at=AGORA - timedelta(days=1))
+    concluido = _inserir(status="completed", completed_at=AGORA - timedelta(days=200))
+    rodando = _inserir()
+    na_fila = _inserir(status="queued", started_at=None)
+    antes = _tabela()
+
+    plano = retencao.plano(AGORA, tmp_path)
+
+    assert _tabela() == antes
+    assert entrada.is_file()
+    decisoes = {j["id"]: j["decisao"] for j in plano["jobs"]}
+    assert decisoes == {falho: "candidato_limpeza", recente: "manter", concluido: "candidato_retencao",
+                        rodando: "manter", na_fila: "manter"}
+    assert plano["arquivos_candidatos"] == 1
+
+
+def test_plano_de_retencao_por_tenant_nao_le_outro_tenant(jobs_isolados, tmp_path):
+    import retencao
+
+    nosso = _inserir(status="failed", completed_at=AGORA - timedelta(days=31), tenant_id="demo")
+    alheio = _inserir(status="failed", completed_at=AGORA - timedelta(days=31), tenant_id="outro")
+    assert [j["id"] for j in retencao.plano(AGORA, tmp_path, tenant="demo")["jobs"]] == [nosso]
+    plano = retencao.plano(AGORA, tmp_path, job_ids=[alheio], tenant="demo")
+    assert plano["jobs"] == [{"id": alheio, "decisao": "nao_encontrado"}]
+
+
+def test_sessao_do_plano_de_retencao_recusa_escrita(jobs_isolados):
+    import retencao
+
+    job_id = _inserir(status="failed", completed_at=AGORA - timedelta(days=31))
+    with pytest.raises(psycopg2.errors.ReadOnlySqlTransaction):
+        with retencao._conexao_leitura() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM jobs WHERE id = %s", (job_id,))
+
+
+def test_plano_de_retencao_consulta_mista_soma_o_total(jobs_isolados, tmp_path):
+    import retencao
+
+    nosso = _inserir(status="failed", completed_at=AGORA - timedelta(days=31), tenant_id="demo")
+    alheio = _inserir(status="failed", completed_at=AGORA - timedelta(days=31), tenant_id="outro")
+    antes = _tabela()
+    plano = retencao.plano(AGORA, tmp_path, job_ids=[nosso, "inexistente", alheio, nosso], tenant="demo")
+    assert _tabela() == antes
+    assert {j["id"]: j["decisao"] for j in plano["jobs"]} == {
+        nosso: "candidato_limpeza", "inexistente": "nao_encontrado", alheio: "nao_encontrado"}
+    assert sum(plano["resumo"].values()) == plano["total"] == len(plano["jobs"]) == 3
