@@ -547,3 +547,165 @@ def test_plano_de_retencao_consulta_mista_soma_o_total(jobs_isolados, tmp_path):
     assert {j["id"]: j["decisao"] for j in plano["jobs"]} == {
         nosso: "candidato_limpeza", "inexistente": "nao_encontrado", alheio: "nao_encontrado"}
     assert sum(plano["resumo"].values()) == plano["total"] == len(plano["jobs"]) == 3
+
+
+# ---- Diagnóstico da fila: Redis real numa DB isolada (15), nunca a do broker real ----------------
+
+@pytest.fixture
+def redis_isolado(monkeypatch):
+    """(app Celery, cliente redis-py, chaves criadas), na DB 15 travada e conferida (tests/broker_isolado.py).
+
+    O teste registra cada chave antes de criá-la; no fim só elas são apagadas, pelo nome. Nada é varrido para
+    apagar. DB ocupada, suja ou com sobra não registrada falha o teste (nunca skip): a integração não some calada.
+    """
+    from contextlib import ExitStack
+
+    import redis
+
+    import diagnostico_fila
+    from broker_isolado import BrokerNaoIsolado, app_isolado, cliente_isolado, db_exclusiva, isolar_diagnostico
+
+    real = redis.Redis.from_url(diagnostico_fila.BROKER_URL)  # só leitura: conferir que nada chegou ao real
+    broker_real = {k: real.dump(k) for k in real.scan_iter()}
+    cliente, _ = cliente_isolado()
+    uso = db_exclusiva(cliente)
+    try:
+        criadas = uso.__enter__()
+    except BrokerNaoIsolado as erro:
+        pytest.fail(f"Redis isolado inutilizável, nada foi publicado nem apagado: {erro}")
+    with ExitStack() as pilha:
+        pilha.push(uso)  # limpa e confere sobras ainda com a trava, mesmo se algo abaixo falhar
+        app, _ = app_isolado(monkeypatch)  # falha aqui, antes de qualquer publicação, se não for a DB 15
+        isolar_diagnostico(monkeypatch, diagnostico_fila)
+        yield app, cliente, criadas
+    assert {k: real.dump(k) for k in real.scan_iter()} == broker_real
+
+
+def test_diagnostico_da_fila_com_broker_e_banco_reais(jobs_isolados, redis_isolado):
+    import json
+
+    import diagnostico_fila
+
+    app, redis_isolado, criadas = redis_isolado
+    na_fila, reservado, terminado, ausente = (str(uuid.uuid4()) for _ in range(4))
+    criadas.update({"celery", "_kombu.binding.celery"})  # registradas antes de publicar
+    for task_id in (na_fila, reservado):
+        app.send_task("geolume.process_job", args=["/nada", "x"], task_id=task_id)
+    # Simula a reserva do worker: a mensagem real sai da fila e vai para `unacked`, como no kombu.
+    mensagem = next(m for m in redis_isolado.lrange("celery", 0, -1) if reservado in m.decode())
+    redis_isolado.lrem("celery", 1, mensagem)
+    criadas.add("unacked")  # registrada antes de criar
+    redis_isolado.hset("unacked", "tag-1", json.dumps([json.loads(mensagem), "", "celery"]))
+    criadas.add(f"celery-task-meta-{terminado}")
+    app.backend.store_result(terminado, None, "FAILURE")
+    ids = {nome: _inserir(status="queued", task_id=task_id, started_at=None, created_at=AGORA - timedelta(hours=1),
+                          tenant_id="demo")
+           for nome, task_id in [("na_fila", na_fila), ("reservado", reservado), ("terminado", terminado),
+                                 ("ausente", ausente), ("invalido", "t-1"), ("sem_tarefa", None)]}
+    ids["outro_tenant"] = _inserir(status="queued", task_id=na_fila, started_at=None, tenant_id="outro")
+    antes_banco, antes_redis = _tabela(), {k: redis_isolado.dump(k) for k in redis_isolado.scan_iter()}
+
+    rel = diagnostico_fila.relatorio(AGORA, job_ids=[*ids.values(), "inexistente"], tenant="demo")
+
+    assert _tabela() == antes_banco
+    assert {k: redis_isolado.dump(k) for k in redis_isolado.scan_iter()} == antes_redis
+    por_id = {j["id"]: (j["categoria"], j.get("motivo")) for j in rel["jobs"]}
+    assert por_id == {
+        ids["na_fila"]: ("fila_confirmada", "na_fila"),
+        ids["reservado"]: ("fila_confirmada", "reservada_pelo_worker"),
+        ids["terminado"]: ("task_nao_localizada", "ausente_da_fila_e_das_reservas"),
+        ids["ausente"]: ("task_nao_localizada", "ausente_da_fila_e_das_reservas"),
+        ids["invalido"]: ("task_id_invalido", "formato_inesperado"),
+        ids["sem_tarefa"]: ("queued_sem_task_id", "enfileiramento_perdido"),
+        ids["outro_tenant"]: ("nao_encontrado", None),
+        "inexistente": ("nao_encontrado", None),
+    }
+    terminado_job = next(j for j in rel["jobs"] if j["id"] == ids["terminado"])
+    assert terminado_job["broker"]["estado_resultado"] == "FAILURE"
+    assert sum(rel["resumo"].values()) == rel["total"] == 8
+
+
+def test_diagnostico_da_fila_com_redis_fora_do_ar(jobs_isolados, monkeypatch):
+    import diagnostico_fila
+
+    monkeypatch.setattr(diagnostico_fila, "BROKER_URL", "redis://127.0.0.1:1/15")
+    monkeypatch.setattr(diagnostico_fila, "RESULT_BACKEND", "redis://127.0.0.1:1/15")
+    job_id = _inserir(status="queued", started_at=None, task_id=str(uuid.uuid4()))
+    antes = _tabela()
+    rel = diagnostico_fila.relatorio(AGORA, job_ids=[job_id])
+    assert _tabela() == antes
+    assert rel["broker_disponivel"] is False
+    assert (rel["jobs"][0]["categoria"], rel["jobs"][0]["motivo"]) == ("nao_verificavel", "broker_indisponivel")
+
+
+def test_db_isolada_com_chave_preexistente_falha_sem_apagar_nada():
+    """Redis real: chave gravada antes do uso exclusivo. A trava é adquirida (a mensagem "não está vazia" só sai
+    depois dela; trava ocupada daria "em uso" e falharia o match), a DB é recusada e a chave fica intacta.
+    """
+    from broker_isolado import TRAVA, BrokerNaoIsolado, cliente_isolado, db_exclusiva
+
+    cliente, _ = cliente_isolado()
+    externa = f"itest-externa-{uuid.uuid4().hex}"
+    assert cliente.set(externa, b"preexistente", nx=True)
+    try:
+        with pytest.raises(BrokerNaoIsolado, match="não está vazia"):
+            with db_exclusiva(cliente):
+                pytest.fail("não pode entrar com a DB ocupada")
+        assert cliente.get(externa) == b"preexistente"
+        assert not cliente.exists(TRAVA)  # liberada por quem a adquiriu
+    finally:
+        cliente.delete(externa)  # nome único criado por este teste, apagado pelo nome
+
+
+def test_trava_perdida_no_meio_falha_sem_apagar_nada():
+    """Redis real: a validade da trava vence no meio do uso e outro processo trava a DB. Sem posse, nem a chave
+    registrada é apagada (a DB já não é exclusiva) e o uso falha; a trava do outro fica intacta.
+    """
+    import time
+
+    from broker_isolado import TRAVA, VALIDADE_TRAVA, BrokerNaoIsolado, cliente_isolado, db_exclusiva
+
+    cliente, _ = cliente_isolado()
+    outro, _ = cliente_isolado()  # como outro processo: conexão própria
+    outra_trava = outro.lock(TRAVA, timeout=VALIDADE_TRAVA, blocking=False)
+    propria = f"itest-propria-{uuid.uuid4().hex}"
+    try:
+        with pytest.raises(BrokerNaoIsolado, match="validade"):
+            with db_exclusiva(cliente) as criadas:
+                criadas.add(propria)
+                cliente.set(propria, b"do teste")
+                outro.pexpire(TRAVA, 1)  # a validade vence agora, sem esperar 120 s
+                while outro.exists(TRAVA):
+                    time.sleep(0.01)
+                assert outra_trava.acquire(blocking=False)
+        assert cliente.get(propria) == b"do teste"
+        assert outra_trava.owned()
+    finally:
+        if outra_trava.owned():
+            outra_trava.release()  # só com o token do outro processo simulado
+        cliente.delete(propria)  # nome único criado por este teste, apagado pelo nome
+
+
+def test_db_isolada_preserva_chave_que_o_teste_nao_criou():
+    """Redis real: outro cliente, com conexão própria e sem acesso a `criadas`, grava durante o uso exclusivo.
+
+    Só a chave registrada sai; a do outro cliente fica e o uso falha. DB ocupada ou suja na entrada dá outra
+    mensagem e também falha: nunca vira skip.
+    """
+    from broker_isolado import BrokerNaoIsolado, cliente_isolado, db_exclusiva
+
+    cliente, _ = cliente_isolado()
+    outro, _ = cliente_isolado()  # como outro processo: conexão própria, nunca registra em `criadas`
+    assert outro.connection_pool is not cliente.connection_pool
+    externa = f"itest-externa-{uuid.uuid4().hex}"
+    try:
+        with pytest.raises(BrokerNaoIsolado, match="1 chave"):
+            with db_exclusiva(cliente) as criadas:
+                criadas.add("celery")
+                cliente.rpush("celery", b"do teste")
+                outro.set(externa, b"de outro processo")
+                assert criadas == {"celery"}
+        assert outro.get(externa) == b"de outro processo"
+        assert not cliente.exists("celery")
+    finally:
+        cliente.delete(externa)  # nome único criado por este teste, apagado pelo nome
