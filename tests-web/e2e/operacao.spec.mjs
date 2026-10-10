@@ -84,6 +84,16 @@ test("job com falha", async ({ page }) => {
   await expect(page.getByTestId("detail-error")).not.toHaveText(/^[a-z_]+:/);
 });
 
+test("poligono submilimetrico falha com o motivo, nao com a mensagem generica", async ({ page }) => {
+  await page.goto("/");
+  await submit(page, fixture("submilimetrico.geojson"));
+  await expect(page.getByTestId("detail-status")).toHaveText("Falhou", { timeout: 90_000 });
+  await expect(page.getByTestId("detail-error")).toHaveText(
+    "O polígono é pequeno demais: após arredondar as coordenadas para milímetros, resta 1 vértice; é necessário pelo menos 3.",
+  );
+  await expect(page.getByTestId("detail-error")).not.toHaveText(/^[a-z_]+:/);
+});
+
 test("selecionar job do historico", async ({ page }) => {
   await page.goto("/");
   await page.locator(`[data-testid="jobs-row"][data-task-id="${completedTaskId}"]`).click();

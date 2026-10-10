@@ -59,6 +59,47 @@ def test_vertex_table_remove_duplicados_consecutivos():
     assert all(v.distancia_m > 0 for v in vertices)
 
 
+# Regra real (_mesmo_ponto): E e N arredondados a 3 casas (round do Python) e comparados; não é distância < 1 mm.
+E0, N0 = 189303.0, 8251045.0  # ordem de grandeza de E/N UTM reais (Brasília)
+
+
+def _quantos(anel):
+    return len(vertex_table(anel))
+
+
+def test_vertex_table_mesmo_valor_arredondado_colapsa():
+    # 0,4 mm: E arredonda para o mesmo milímetro do vizinho.
+    assert _quantos([(E0, N0), (E0 + 0.0004, N0), (E0, N0 + 0.0004)]) == 1
+    assert _quantos([(E0, N0), (E0 + 0.0004, N0), (E0 + 5, N0 + 5)]) == 2
+
+
+def test_vertex_table_cruzar_a_fronteira_do_arredondamento_mantem_os_pontos():
+    """0,2 mm entre si, mas de lados opostos da fronteira de 0,5 mm: arredondam diferente e ficam os 3."""
+    assert _quantos([(E0 + 0.0004, N0), (E0 + 0.0006, N0), (E0 + 5, N0 + 5)]) == 3
+
+
+def test_vertex_table_um_mm_exato_continua_distinto():
+    assert _quantos([(E0, N0), (E0 + 0.001, N0), (E0, N0 + 0.001)]) == 3
+
+
+def test_vertex_table_ponto_de_fechamento_igual_ao_primeiro_depois_do_arredondamento_sai():
+    anel = [(E0, N0), (E0 + 10, N0), (E0 + 10, N0 + 10), (E0 + 0.0004, N0 + 0.0004)]
+    vertices = vertex_table(anel)
+    assert [(v.e, v.n) for v in vertices] == [(E0, N0), (E0 + 10, N0), (E0 + 10, N0 + 10)]
+
+
+def test_vertex_table_so_compara_consecutivos():
+    # O 3º volta ao milímetro do 1º, mas não é vizinho dele nem é o fechamento: fica.
+    assert _quantos([(E0, N0), (E0 + 5, N0), (E0 + 0.0004, N0), (E0 + 5, N0 + 5)]) == 4
+
+
+@pytest.mark.parametrize("sinal", [1, -1], ids=["positivo", "negativo"])
+def test_vertex_table_arredondamento_igual_com_sinal_positivo_e_negativo(sinal):
+    """-0,0004 e 0,0004 arredondam para -0.0 e 0.0, que são iguais; o resultado não depende do sinal."""
+    assert _quantos([(sinal * 0.0004, sinal * 0.0004), (-sinal * 0.0004, 0.0), (sinal * 5, sinal * 5)]) == 2
+    assert _quantos([(sinal * 0.0004, 0.0), (sinal * 0.0006, 0.0), (sinal * 5, sinal * 5)]) == 3
+
+
 # ---- Coordenadas geográficas em GMS e fuso UTM --------------------------------
 
 from geolume_worker.geometry import format_gms, fuso_utm  # noqa: E402

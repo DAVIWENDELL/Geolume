@@ -264,3 +264,24 @@ def test_run_job_coordenada_invalida_falha_sem_artefatos(qgis_app, tmp_path, ane
     assert exc.value.codigo == codigo
     assert str(exc.value) == f"{codigo}: {exc.value.mensagem}"
     assert not (saida / "coord").exists()  # nenhum mapa.pdf, memorial.pdf ou resultado.json parcial
+
+
+@pytest.mark.parametrize("anel, final", [
+    ([[-47.9, -15.8], [-47.899999998, -15.8], [-47.9, -15.799999998], [-47.9, -15.8]],
+     "resta 1 vértice; é necessário pelo menos 3."),
+    ([[-47.9, -15.8], [-47.899999998, -15.8], [-47.89999, -15.79999], [-47.9, -15.8]],
+     "restam 2 vértices; são necessários pelo menos 3."),
+], ids=["colapsa-em-1", "colapsa-em-2"])
+def test_run_job_poligono_submilimetrico_falha_com_codigo_sem_artefatos(qgis_app, tmp_path, anel, final):
+    """Antes virava artefato_invalido (tabela com 1 ou 2 vértices) e o cliente via só a falha genérica."""
+    entrada = tmp_path / "entrada" / "pequeno.geojson"
+    entrada.parent.mkdir()
+    entrada.write_text(json.dumps({"type": "Polygon", "coordinates": [anel]}), encoding="utf-8")
+    saida = tmp_path / "saida"
+    with pytest.raises(InvalidInputError) as exc:
+        run_job(entrada, saida, job_id="pequeno")
+    assert str(exc.value) == (
+        "poligono_muito_pequeno: O polígono é pequeno demais: após arredondar as coordenadas para milímetros, " + final
+    )
+    assert str(tmp_path) not in str(exc.value) and "Traceback" not in str(exc.value)
+    assert not (saida / "pequeno").exists()  # nenhum mapa.pdf, memorial.pdf ou resultado.json parcial

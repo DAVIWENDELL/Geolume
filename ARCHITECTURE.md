@@ -76,7 +76,7 @@ A API publica somente `127.0.0.1:8000` no Compose de desenvolvimento. `/health` 
 - EPSG:4326 ou EPSG:4674. Membro `crs` legado só com nome EPSG/URN aceito; qualquer outro (inclusive `link`) é recusado antes do OGR, que cairia em EPSG:4326 sem avisar ou baixaria o `href`.
 - Sem furos, sem múltiplas feições e sem múltiplas partes.
 - Limite de 10 MB e até 5.000 vértices.
-- Cobertura UTM SIRGAS 2000 suportada: fusos 17N–22N e 18S–25S, conferida em cada vértice (não só no centroide). Latitude fora de -90°..90° ou longitude fora de -180°..180° sai como `coordenada_invalida`.
+- Cobertura UTM SIRGAS 2000 suportada: fusos 17N–22N e 18S–25S, conferida em cada vértice (não só no centroide). Latitude fora de -90°..90° ou longitude fora de -180°..180° sai como `coordenada_invalida`. Polígono válido em graus pode ficar sem vértices suficientes: depois da reprojeção para UTM, `geometry.vertex_table` arredonda E e N a três casas decimais e deduplica os pontos consecutivos que ficam iguais depois do arredondamento, além do ponto de fechamento igual ao primeiro; se restarem menos de 3 vértices, `processing.process` recusa com `poligono_muito_pequeno` (código público), antes de criar a pasta do job. Não é uma regra de distância: pontos a menos de 1 mm que arredondam para valores diferentes continuam distintos, e pontos não consecutivos não são comparados.
 - Upload assíncrono total: 12 MB, incluindo logo de até 2 MB.
 
 ## Contratos de saída
@@ -109,7 +109,6 @@ O fluxo é orientado a um polígono GeoJSON. KML/Shapefile, dados de clientes, a
 
 Limitações conhecidas, verificadas no QA de 2026-10-09:
 
-- Polígono submilimétrico passa na validação de entrada, mas a tabela de vértices (deduplicada ao milímetro) fica com 1 ou 2 vértices e o job termina `failed` com `artefato_invalido`, que o cliente vê como falha genérica.
 - Não há golden completo do texto do `memorial.pdf` nem da forma do `resultado.json`; só do texto do mapa padrão.
 - `acks_late` está desligado: parar o Celery com a fila parada preserva as mensagens (job `queued` com `task_id` é processado ao voltar), mas parar durante um processamento perde a mensagem e deixa o job `started` até expirar (30 min) e ser recuperado à mão. Reiniciar o Celery só sem job `started`.
 - 7 jobs `completed` de teste de 2026-10-01 têm artefatos zerados e continuam sendo servidos; a conferência de integridade vale para jobs novos.

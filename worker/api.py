@@ -74,7 +74,8 @@ UPLOAD_LIMITES = {
 CODIGOS_DE_VALIDACAO = frozenset({
     "arquivo_muito_grande", "arquivo_nao_encontrado", "coordenada_invalida", "crs_nao_suportado",
     "excesso_de_vertices", "fora_da_cobertura", "geometria_invalida", "geometria_nao_poligonal",
-    "json_invalido", "multiplas_feicoes", "multiplas_partes", "poligono_com_furos", "sem_feicoes",
+    "json_invalido", "multiplas_feicoes", "multiplas_partes", "poligono_com_furos", "poligono_muito_pequeno",
+    "sem_feicoes",
     # Prancha (revalidada no worker)
     "alfa_invalido", "cor_invalida", "estilo_invalido", "legenda_invalida", "logo_ausente", "logo_dimensoes",
     "logo_grande", "logo_invalida",

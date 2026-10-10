@@ -353,6 +353,12 @@ def test_erro_de_coordenada_chega_ao_cliente_como_veio(api_module, erro):
     assert api_module._erro_publico(erro) == erro
 
 
+@pytest.mark.parametrize("final", ["resta 1 vértice; é necessário pelo menos 3.", "restam 2 vértices; são necessários pelo menos 3."], ids=["resta-1", "restam-2"])
+def test_poligono_muito_pequeno_chega_ao_cliente_como_veio(api_module, final):
+    erro = "poligono_muito_pequeno: O polígono é pequeno demais: após arredondar as coordenadas para milímetros, " + final
+    assert api_module._erro_publico(erro) == erro
+
+
 def test_erro_bruto_de_geometria_nula_nao_chega_ao_cliente(api_module):
     assert api_module._erro_publico("Null geometry cannot be converted to point.") == "Falha no processamento do job."
 
