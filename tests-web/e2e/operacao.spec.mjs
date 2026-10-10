@@ -194,6 +194,42 @@ test("resposta atrasada de consulta reiniciada nao volta o estado", async ({ pag
   await expect(page.getByTestId("detail-status")).toHaveText("Concluído");
 });
 
+test("job na fila mostra o estado e avisa que os documentos vêm depois", async ({ page }) => {
+  const taskId = "00000000-0000-4000-8000-000000000003";
+  await page.route(/\/jobs\/async$/, (route) =>
+    route.fulfill({ status: 202, json: { task_id: taskId, job_id: "d".repeat(32), status: "queued" } }),
+  );
+  await page.route(new RegExp(`/jobs/${taskId}$`), (route) =>
+    route.fulfill({ json: { task_id: taskId, job_id: "d".repeat(32), status: "queued", erro: null, arquivos: {} } }),
+  );
+  await page.goto("/");
+  await submit(page, fixture("lote_simples.geojson"));
+  await expect(page.getByTestId("detail-status")).toHaveText("Na fila");
+  await expect(page.locator("[data-docs-hint]")).toHaveText("Os documentos aparecem aqui quando o processamento terminar.");
+  await expect(page.getByTestId("detail-links").locator("a")).toHaveCount(0);
+  await expect(page.getByTestId("detail-error")).toBeHidden();
+});
+
+test("falha interna aparece com a mensagem genérica, sem código e sem documentos", async ({ page }) => {
+  // A API real troca "artefato_invalido: mapa.pdf=..." por esta mensagem (_erro_publico, coberto no pytest).
+  const taskId = "00000000-0000-4000-8000-000000000004";
+  await page.route(/\/jobs\/async$/, (route) =>
+    route.fulfill({ status: 202, json: { task_id: taskId, job_id: "c".repeat(32), status: "queued" } }),
+  );
+  await page.route(new RegExp(`/jobs/${taskId}$`), (route) =>
+    route.fulfill({
+      json: { task_id: taskId, job_id: "c".repeat(32), status: "failed", erro: "Falha no processamento do job.", arquivos: {} },
+    }),
+  );
+  await page.goto("/");
+  await submit(page, fixture("lote_simples.geojson"));
+  await expect(page.getByTestId("detail-status")).toHaveText("Falhou");
+  await expect(page.getByTestId("detail-error")).toHaveText("Falha no processamento do job.");
+  await expect(page.getByTestId("detail")).not.toContainText("artefato_invalido");
+  await expect(page.getByTestId("detail-links").locator("a")).toHaveCount(0);
+  await expect(page.locator("[data-docs-hint]")).toHaveText("Nenhum documento gerado.");
+});
+
 test("leitor de tela ouve so mudancas de estado", async ({ page }) => {
   const taskId = "00000000-0000-4000-8000-000000000002";
   await page.route(/\/jobs\/async$/, (route) =>

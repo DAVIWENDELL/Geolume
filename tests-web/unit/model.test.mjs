@@ -150,3 +150,27 @@ test("mensagemErro tira o código interno do motivo e mantém o texto para quem 
   assert.equal(mensagemErro(""), "");
   assert.equal(mensagemErro(undefined), "");
 });
+
+// Textos exatos que a API grava para poligono_muito_pequeno (worker/geolume_worker/processing.py).
+const PEQUENO = "O polígono é pequeno demais: após arredondar as coordenadas para milímetros, ";
+
+test("mensagemErro mantém inteira a mensagem de poligono_muito_pequeno com 1 vértice (singular)", () => {
+  const texto = `${PEQUENO}resta 1 vértice; é necessário pelo menos 3.`;
+  assert.equal(mensagemErro(`poligono_muito_pequeno: ${texto}`), texto);
+});
+
+test("mensagemErro mantém inteira a mensagem de poligono_muito_pequeno com 2 vértices (plural)", () => {
+  const texto = `${PEQUENO}restam 2 vértices; são necessários pelo menos 3.`;
+  assert.equal(mensagemErro(`poligono_muito_pequeno: ${texto}`), texto);
+});
+
+test("mensagemErro tira só o código do início: os dois-pontos do texto ficam", () => {
+  assert.equal(mensagemErro("codigo_x: Parte 1: parte 2: parte 3."), "Parte 1: parte 2: parte 3.");
+});
+
+test("falha interna (artefato_invalido) chega pela API como a mensagem genérica e aparece igual", () => {
+  // _erro_publico troca qualquer código fora da lista pública por este texto (coberto no pytest).
+  const generica = "Falha no processamento do job.";
+  assert.equal(mensagemErro(generica), generica);
+  assert.doesNotMatch(mensagemErro(generica), /artefato_invalido|\.pdf|\.json|=/);
+});
