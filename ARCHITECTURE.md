@@ -83,6 +83,8 @@ A API publica somente `127.0.0.1:8000` no Compose de desenvolvimento. `/health` 
 
 `resultado.json` inclui versão do esquema, identificação da entrada/job, propriedades, EPSG de saída, área, perímetro, vértices e métricas. O mapa é A4 paisagem; o memorial é A4 retrato, pode ser paginado e contém rodapé indicando que é preliminar.
 
+Regressão coberta em `worker/tests/test_contrato_artefatos.py`, com a gleba fictícia `gleba_rural_exemplo.geojson` gerada pelo QGIS em pasta temporária: texto do `memorial.pdf` (`pdftotext -layout`) igual a `fixtures/memorial_gleba_6v.txt`; `resultado.json` igual a `fixtures/resultado_gleba_6v.json` sem `job_id` e sem os valores de `metricas` (tempo e memória variam); contrato exato do JSON (as 10 chaves na ordem, tipos, `versao_esquema` 1, `pdf_memorial` `memorial.pdf`, `crs_saida` `EPSG:n`, vértices com `id`, `e`, `n`, `azimute`, `distancia_m` e `metricas` com as 4 fases), com chave ausente, chave a mais e tipo trocado recusados; e opções de prancha (projeto, responsável, legenda, estilo, cores, opacidade, logo) sem efeito no memorial nem no JSON. Mudança intencional no memorial ou no JSON exige regenerar a referência e revisar o diff.
+
 ## Segurança relevante
 
 - Sessão opaca em cookie `HttpOnly`, `Secure`, `SameSite=Lax`; somente hash do token no banco.
@@ -109,7 +111,6 @@ O fluxo é orientado a um polígono GeoJSON. KML/Shapefile, dados de clientes, a
 
 Limitações conhecidas, verificadas no QA de 2026-10-09:
 
-- Não há golden completo do texto do `memorial.pdf` nem da forma do `resultado.json`; só do texto do mapa padrão.
 - `acks_late` está desligado: parar o Celery com a fila parada preserva as mensagens (job `queued` com `task_id` é processado ao voltar), mas parar durante um processamento perde a mensagem e deixa o job `started` até expirar (30 min) e ser recuperado à mão. Reiniciar o Celery só sem job `started`.
 - 7 jobs `completed` de teste de 2026-10-01 têm artefatos zerados e continuam sendo servidos; a conferência de integridade vale para jobs novos.
 

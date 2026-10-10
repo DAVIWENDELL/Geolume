@@ -1,0 +1,60 @@
+{
+  "versao_esquema": 1,
+  "entrada": "gleba_rural_exemplo.geojson",
+  "propriedades": {
+    "nome_imovel": "Sítio Boa Vista",
+    "proprietario": "Proprietário de exemplo",
+    "municipio": "Brasília",
+    "uf": "DF",
+    "matricula": "EXEMPLO-0001",
+    "tipo": "Gleba rural"
+  },
+  "pdf_memorial": "memorial.pdf",
+  "crs_saida": "EPSG:31983",
+  "area_ha": 27.1773,
+  "perimetro_m": 1959.36,
+  "vertices": [
+    {
+      "id": "V1",
+      "e": 185981.4,
+      "n": 8257079.61,
+      "azimute": "78°45'28\"",
+      "distancia_m": 305.38
+    },
+    {
+      "id": "V2",
+      "e": 186280.92,
+      "n": 8257139.14,
+      "azimute": "138°28'51\"",
+      "distancia_m": 263.04
+    },
+    {
+      "id": "V3",
+      "e": 186455.28,
+      "n": 8256942.2,
+      "azimute": "189°22'23\"",
+      "distancia_m": 303.79
+    },
+    {
+      "id": "V4",
+      "e": 186405.8,
+      "n": 8256642.47,
+      "azimute": "253°28'37\"",
+      "distancia_m": 367.71
+    },
+    {
+      "id": "V5",
+      "e": 186053.28,
+      "n": 8256537.89,
+      "azimute": "306°57'31\"",
+      "distancia_m": 325.57
+    },
+    {
+      "id": "V6",
+      "e": 185793.12,
+      "n": 8256733.64,
+      "azimute": "28°33'17\"",
+      "distancia_m": 393.88
+    }
+  ]
+}
