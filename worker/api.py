@@ -566,25 +566,28 @@ def job_logo(task_id: str, user: dict = Depends(current_user)) -> StreamingRespo
     )
 
 
-def _safe_input_path(raw: object) -> Path | None:
-    """Caminho do banco só vale se, resolvido (links incluídos), for um .geojson direto em inputs/."""
-    if not isinstance(raw, str) or not raw:
+def _safe_input_path(raw: object, job_id: object) -> Path | None:
+    """Caminho do banco só vale se for o upload do próprio job: `{job_id}-{nome}.geojson` direto em
+    inputs/, sem link no nome e com o caminho resolvido igual ao esperado (input_path cruzado não serve)."""
+    if not isinstance(raw, str) or not raw or not isinstance(job_id, str) or not JOB_ID.fullmatch(job_id):
+        return None
+    nome = Path(raw).name
+    if not nome.startswith(f"{job_id}-") or not nome.lower().endswith(".geojson"):
         return None
     try:
-        base = INPUTS_DIR.resolve(strict=True)
-        caminho = Path(raw).resolve(strict=True)
+        caminho = INPUTS_DIR.resolve(strict=True) / nome
+        if caminho.is_symlink() or Path(raw).resolve(strict=True) != caminho:
+            return None
     except (OSError, RuntimeError):
         return None
-    if caminho.parent != base or caminho.suffix.lower() != ".geojson" or not caminho.is_file():
-        return None
-    return caminho
+    return caminho if caminho.is_file() else None
 
 
 @app.get("/jobs/{task_id}/input")
 def job_input(task_id: str, user: dict = Depends(current_user)) -> StreamingResponse:
     registro = _job_or_404(task_id, user)
     indisponivel = HTTPException(status_code=404, detail="Arquivo original não disponível")
-    caminho = _safe_input_path(registro.get("input_path"))
+    caminho = _safe_input_path(registro.get("input_path"), registro.get("id"))
     if caminho is None:
         raise indisponivel
     arquivo = _open_validated(caminho)

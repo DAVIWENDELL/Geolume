@@ -66,9 +66,12 @@ def test_task_repassa_a_prancha_ao_job(celery_module):
     assert celery_module.chamadas[-1]["prancha"] == prancha
 
 
-def test_task_remove_uploads_quando_o_job_falha(celery_module, monkeypatch, tmp_path):
+@pytest.mark.parametrize("erro", [
+    "validacao", "qgis",
+], ids=["falha-de-validacao", "falha-no-qgis"])
+def test_job_failed_mantem_o_geojson_e_remove_so_a_logo(celery_module, monkeypatch, tmp_path, erro):
+    """O GeoJSON de job failed fica (retenção: 30 dias), para o preview mostrar o motivo sobre a geometria."""
     from geolume_worker.errors import InvalidInputError
-
 
     entrada = tmp_path / "inputs" / "job-a-lote.geojson"
     entrada.parent.mkdir()
@@ -79,14 +82,16 @@ def test_task_remove_uploads_quando_o_job_falha(celery_module, monkeypatch, tmp_
     monkeypatch.setattr(celery_module, "OUTPUT_DIR", tmp_path)
 
     def falhar(*args, **kwargs):
-        raise InvalidInputError("json_invalido", "entrada inválida")
+        if erro == "validacao":
+            raise InvalidInputError("json_invalido", "entrada inválida")
+        raise RuntimeError("Falha ao exportar PDF")
 
     monkeypatch.setattr(celery_module, "run_job", falhar)
 
-    with pytest.raises(InvalidInputError):
+    with pytest.raises((InvalidInputError, RuntimeError)):
         celery_module.process_job.run(str(entrada), "job-a", {"logo": True})
 
-    assert not entrada.exists()
+    assert entrada.read_text() == "{}"
     assert not logo.exists()
 
 
@@ -228,6 +233,27 @@ def test_banco_fora_ao_marcar_failed_propaga_sem_outra_transicao(celery_module, 
     with pytest.raises(ConnectionError):
         celery_module.process_job.run(str(tmp_path / "a.geojson"), "job-a")
     assert [r[1] for r in registros] == ["started", "failed"]  # nada de completed
+
+
+@pytest.mark.parametrize("falha", ["recusada", "banco_fora"])
+def test_geojson_fica_quando_o_failed_e_recusado_ou_o_banco_cai(celery_module, monkeypatch, tmp_path, falha):
+    """Job já decidido por outro processo ou banco fora ao marcar failed: o worker não apaga o GeoJSON."""
+    entrada, logo = _uploads(tmp_path)
+    monkeypatch.setattr(celery_module, "OUTPUT_DIR", tmp_path)
+    registros = _registrar_status(celery_module, monkeypatch, falha=False)
+    if falha == "banco_fora":
+        def banco_fora(job_id, erro):
+            raise ConnectionError("banco indisponível")
+
+        monkeypatch.setattr(celery_module, "falhar_job", banco_fora)
+    monkeypatch.setattr(celery_module, "run_job", _sem_feicoes)
+
+    with pytest.raises(Exception):
+        celery_module.process_job.run(str(entrada), "job-a", {"logo": True})
+
+    assert registros[0] == ("job-a", "started")
+    assert entrada.exists()
+    assert not logo.exists()
 
 
 # ---- Conclusão tardia: o banco decide, nada é apagado ------------------------------

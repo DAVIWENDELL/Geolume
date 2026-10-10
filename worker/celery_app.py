@@ -44,12 +44,14 @@ def _ensure_process_qgis_session() -> None:
 @celery.task(name="geolume.process_job")
 def process_job(input_path: str, job_id: str, prancha: dict | None = None) -> dict[str, object]:
     # prancha é opcional: tarefas enfileiradas antes dela chegam só com (input_path, job_id).
+    iniciado = False
     try:
         # Dentro do try: banco fora aqui também limpa os uploads (o failed seguinte é recusado: job não está started).
         if not iniciar_job(job_id):
             # Job já decidido (ex.: recuperação o marcou failed) ou já iniciado: não processa nem apaga nada.
             logger.warning("job %s não estava em queued; início recusado, nada processado", job_id)
             return {"status": "inicio_recusado", "job_id": job_id}
+        iniciado = True
         _ensure_process_qgis_session()
         with qgis_session():
             resultado = run_job(Path(input_path), OUTPUT_DIR, job_id=job_id, prancha=prancha)
@@ -59,7 +61,10 @@ def process_job(input_path: str, job_id: str, prancha: dict | None = None) -> di
                 # A primeira causa gravada (ex.: job_expirado) vale; esta falha fica só no log.
                 logger.warning("job %s não estava em started; falha recusada, causa anterior mantida", job_id)
         finally:
-            Path(input_path).unlink(missing_ok=True)
+            # O GeoJSON de job que chegou a processar fica (retenção: 30 dias), para o preview mostrar o motivo
+            # sobre a geometria; só sai o de quem nem começou (o job continua queued). A logo sempre sai.
+            if not iniciado:
+                Path(input_path).unlink(missing_ok=True)
             caminho_logo(OUTPUT_DIR, job_id).unlink(missing_ok=True)
         raise
     # Fora do try: banco fora daqui em diante não marca failed nem apaga nada (fica started, com os 3 artefatos).

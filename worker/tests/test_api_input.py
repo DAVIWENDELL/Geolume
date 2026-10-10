@@ -115,8 +115,8 @@ def test_nao_segue_link_trocado_antes_de_abrir(api_module, jobs, monkeypatch, tm
     jobs["t1"] = registro(arquivo)
     validar = api_module._safe_input_path
 
-    def validar_e_trocar(raw):
-        caminho = validar(raw)
+    def validar_e_trocar(raw, job_id):
+        caminho = validar(raw, job_id)
         arquivo.unlink()
         arquivo.symlink_to(segredo)
         return caminho
@@ -177,6 +177,79 @@ def test_bloqueia_extensao_diferente(api_module, jobs):
     assert assert_404(api_module, "t1") == "Arquivo original não disponível"
 
 
+def test_proprio_job_com_nome_do_upload_e_servido(api_module, jobs):
+    arquivo = api_module.INPUTS_DIR / f"job1-{FIXTURE}"
+    arquivo.write_text('{"proprio": true}')
+    jobs["t1"] = registro(arquivo)
+    assert body(api_module.job_input("t1", USUARIO)) == b'{"proprio": true}'
+
+
+def test_input_path_de_outro_job_nao_e_servido(api_module, jobs):
+    """input_path cruzado no banco: o GeoJSON existe e é válido, mas é de outro job."""
+    alheio = api_module.INPUTS_DIR / f"job2-{FIXTURE}"
+    alheio.write_text('{"alheio": true}')
+    jobs["t1"] = registro(alheio)
+    assert assert_404(api_module, "t1") == "Arquivo original não disponível"
+
+
+@pytest.mark.parametrize("nome", [FIXTURE, f"job10-{FIXTURE}", f"job1{FIXTURE}", f"xjob1-{FIXTURE}"],
+                         ids=["sem-prefixo", "id-mais-longo", "sem-hifen", "prefixo-no-meio"])
+def test_nome_sem_o_prefixo_do_job_nao_e_servido(api_module, jobs, nome):
+    arquivo = api_module.INPUTS_DIR / nome
+    arquivo.write_text("{}")
+    jobs["t1"] = registro(arquivo)
+    assert assert_404(api_module, "t1") == "Arquivo original não disponível"
+
+
+@pytest.mark.parametrize("job_id", [None, "", "../job1", "job1/x"])
+def test_job_sem_id_valido_nao_serve_input(api_module, jobs, job_id):
+    arquivo = api_module.INPUTS_DIR / f"job1-{FIXTURE}"
+    arquivo.write_text("{}")
+    jobs["t1"] = {**registro(arquivo), "id": job_id}
+    assert assert_404(api_module, "t1") == "Arquivo original não disponível"
+
+
+def test_link_simbolico_com_nome_do_job_para_input_de_outro_job(api_module, jobs):
+    alheio = api_module.INPUTS_DIR / f"job2-{FIXTURE}"
+    alheio.write_text('{"alheio": true}')
+    link = api_module.INPUTS_DIR / f"job1-{FIXTURE}"
+    link.symlink_to(alheio)
+    jobs["t1"] = registro(link)
+    assert assert_404(api_module, "t1") == "Arquivo original não disponível"
+
+
+def test_link_simbolico_para_outro_arquivo_do_proprio_job(api_module, jobs):
+    real = api_module.INPUTS_DIR / "job1-outro.geojson"
+    real.write_text("{}")
+    link = api_module.INPUTS_DIR / f"job1-{FIXTURE}"
+    link.symlink_to(real)
+    jobs["t1"] = registro(link)
+    assert assert_404(api_module, "t1") == "Arquivo original não disponível"
+
+
+def test_hard_link_com_nome_do_job_para_input_de_outro_job(api_module, jobs):
+    alheio = api_module.INPUTS_DIR / f"job2-{FIXTURE}"
+    alheio.write_text('{"alheio": true}')
+    os.link(alheio, api_module.INPUTS_DIR / f"job1-{FIXTURE}")
+    jobs["t1"] = registro(api_module.INPUTS_DIR / f"job1-{FIXTURE}")
+    assert assert_404(api_module, "t1") == "Arquivo original não disponível"
+
+
+def test_caminho_com_nome_do_job_fora_de_inputs(api_module, jobs, tmp_path):
+    """Mesmo nome que existe em inputs/: vale o caminho gravado, não só o nome."""
+    (api_module.INPUTS_DIR / f"job1-{FIXTURE}").write_text("{}")
+    fora = tmp_path / "fora"
+    fora.mkdir()
+    (fora / f"job1-{FIXTURE}").write_text('{"fora": true}')
+    jobs["t1"] = registro(fora / f"job1-{FIXTURE}")
+    assert assert_404(api_module, "t1") == "Arquivo original não disponível"
+    sub = api_module.INPUTS_DIR / "job1"
+    sub.mkdir()
+    (sub / f"job1-{FIXTURE}").write_text("{}")
+    jobs["t2"] = registro(sub / f"job1-{FIXTURE}")
+    assert assert_404(api_module, "t2") == "Arquivo original não disponível"
+
+
 def test_upload_assincrono_grava_input_path(api_module, monkeypatch, tmp_path):
     import asyncio
     import io
@@ -209,8 +282,8 @@ def test_nao_serve_hard_link_trocado_antes_de_abrir(api_module, jobs, monkeypatc
     jobs["t1"] = registro(arquivo)
     validar = api_module._safe_input_path
 
-    def validar_e_trocar(raw):
-        caminho = validar(raw)
+    def validar_e_trocar(raw, job_id):
+        caminho = validar(raw, job_id)
         arquivo.unlink()
         os.link(segredo, arquivo)
         return caminho
@@ -230,8 +303,8 @@ def test_nao_serve_se_a_pasta_inputs_for_trocada_antes_de_abrir(api_module, jobs
     validar = api_module._safe_input_path
     inputs = api_module.INPUTS_DIR
 
-    def validar_e_trocar(raw):
-        caminho = validar(raw)
+    def validar_e_trocar(raw, job_id):
+        caminho = validar(raw, job_id)
         inputs.rename(inputs.with_name("inputs-antigo"))
         inputs.symlink_to(fora, target_is_directory=True)
         return caminho

@@ -4,10 +4,12 @@ Roda num schema temporário próprio (itest_*), com uma cópia vazia da estrutur
 no fim: nunca lê nem escreve em public.jobs.
 """
 
+import json
 import os
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -709,3 +711,184 @@ def test_db_isolada_preserva_chave_que_o_teste_nao_criou():
         assert not cliente.exists("celery")
     finally:
         cliente.delete(externa)  # nome único criado por este teste, apagado pelo nome
+
+
+# ---- Isolamento por tenant: SQL real (JOB_ACCESS) num schema itest_*, rotas HTTP da API --------------
+
+T1, T2 = "itest-t1", "itest-t2"
+DONO = {"user_id": "u-dono", "email": "dono@geolume.test", "tenant_id": T1, "role": "member"}
+COLEGA = {"user_id": "u-colega", "email": "colega@geolume.test", "tenant_id": T1, "role": "member"}
+ADMIN_T1 = {"user_id": "u-adm1", "email": "adm1@geolume.test", "tenant_id": T1, "role": "admin"}
+MEMBRO_T2 = {"user_id": "u-dono", "email": "outro@geolume.test", "tenant_id": T2, "role": "member"}  # mesmo id
+ADMIN_T2 = {"user_id": "u-adm2", "email": "adm2@geolume.test", "tenant_id": T2, "role": "admin"}
+RECURSOS = ("", "/files/mapa", "/files/memorial", "/files/resultado", "/input", "/logo")
+
+
+@pytest.fixture
+def api_real(jobs_isolados, monkeypatch, tmp_path):
+    """Rotas da API chamadas direto (como em test_api_authz) com o usuário já resolvido, sobre o SQL real de
+    get_job_for/list_jobs_for no schema itest_*. Login e sessão têm testes próprios; httpx não está na imagem."""
+    import importlib
+    import sys
+
+    monkeypatch.setattr(db, "init_db", lambda *args, **kwargs: None)
+    for nome in ("api", "celery_app"):
+        sys.modules.pop(nome, None)
+    api = importlib.import_module("api")
+    saida = tmp_path / "saida"
+    (saida / "inputs").mkdir(parents=True)
+    monkeypatch.setattr(api, "OUTPUT_DIR", saida)
+    monkeypatch.setattr(api, "INPUTS_DIR", saida / "inputs")
+    yield SimpleNamespace(api=api, saida=saida)
+    for nome in ("api", "celery_app"):
+        sys.modules.pop(nome, None)
+
+
+def _chamar(api_real, user, task_id, recurso):
+    """(status, texto) de GET /jobs/{task_id}{recurso}; corpo em streaming lido e descritor fechado."""
+    import asyncio
+
+    from fastapi import HTTPException
+
+    api = api_real.api
+    rotas = {"": lambda: api.job_status(task_id, user), "/input": lambda: api.job_input(task_id, user),
+             "/logo": lambda: api.job_logo(task_id, user),
+             **{f"/files/{tipo}": (lambda t=tipo: api.download_job_file(task_id, t, user))
+                for tipo in ("mapa", "memorial", "resultado")}}
+    try:
+        resposta = rotas[recurso]()
+    except HTTPException as exc:
+        return exc.status_code, json.dumps(exc.detail)
+    if isinstance(resposta, dict):
+        return 200, json.dumps(resposta, default=str)
+
+    async def ler():
+        return b"".join([parte async for parte in resposta.body_iterator])
+
+    try:
+        corpo = asyncio.run(ler())
+    finally:
+        if resposta.background:
+            asyncio.run(resposta.background())
+    return resposta.status_code, f"{len(corpo)} bytes"
+
+
+def _job_do_tenant(api_real, tenant, owner_id):
+    """Job completed com os 3 artefatos íntegros, GeoJSON e logo, gravado no schema itest_* pelo INSERT real."""
+    from geolume_worker.prancha import caminho_logo
+    from psycopg2.extras import Json
+
+    import artefatos
+
+    job_id, task_id = uuid.uuid4().hex, str(uuid.uuid4())
+    pasta = artefatos.gravar(api_real.saida / job_id, job_id)
+    entrada = api_real.saida / "inputs" / f"{job_id}-lote.geojson"
+    entrada.write_text('{"type": "FeatureCollection", "features": []}')
+    logo = caminho_logo(api_real.saida, job_id)
+    logo.parent.mkdir(exist_ok=True)
+    logo.write_bytes(b"\x89PNG\r\n\x1a\n")
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO jobs (id, task_id, status, input_filename, created_at, completed_at, input_path, owner_id,
+                                 tenant_id, prancha, mapa_path, memorial_path, resultado_path)
+               VALUES (%s, %s, 'completed', 'lote.geojson', %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (job_id, task_id, AGORA - timedelta(hours=1), AGORA, str(entrada), owner_id, tenant, Json({"logo": True}),
+             str(pasta / "mapa.pdf"), str(pasta / "memorial.pdf"), str(pasta / "resultado.json")))
+    return task_id
+
+
+def _status(api_real, user, task_id):
+    return {rec or "/jobs/{id}": _chamar(api_real, user, task_id, rec)[0] for rec in RECURSOS}
+
+
+def test_dono_e_admin_do_tenant_acessam_os_6_recursos(api_real):
+    task_id = _job_do_tenant(api_real, T1, DONO["user_id"])
+    for user in (DONO, ADMIN_T1):
+        assert set(_status(api_real, user, task_id).values()) == {200}, user["email"]
+
+
+@pytest.mark.parametrize("user", [COLEGA, MEMBRO_T2, ADMIN_T2],
+                         ids=["colega-do-mesmo-tenant", "outro-tenant-mesmo-user-id", "admin-de-outro-tenant"])
+def test_quem_nao_e_dono_nem_admin_do_tenant_recebe_404_nos_6_recursos(api_real, user):
+    task_id = _job_do_tenant(api_real, T1, DONO["user_id"])
+    for rec in RECURSOS:
+        status, texto = _chamar(api_real, user, task_id, rec)
+        assert status == 404, rec
+        assert "itest" not in texto and DONO["user_id"] not in texto  # nem tenant nem dono
+    # Mesma resposta de um id que não existe: não revela que o job existe em outro tenant.
+    assert _chamar(api_real, user, task_id, "") == _chamar(api_real, user, str(uuid.uuid4()), "")
+
+
+def test_listagem_so_mostra_o_proprio_tenant(api_real):
+    do_t1 = _job_do_tenant(api_real, T1, DONO["user_id"])
+    do_t2 = _job_do_tenant(api_real, T2, "u-alguem-t2")
+
+    def listados(user):
+        return {j["task_id"] for j in api_real.api.jobs(50, user)["jobs"]}
+
+    assert listados(DONO) == {do_t1}
+    assert listados(ADMIN_T1) == {do_t1}
+    assert listados(ADMIN_T2) == {do_t2}
+    assert listados(MEMBRO_T2) == set()  # mesmo user_id do dono, outro tenant
+    assert listados(COLEGA) == set()
+
+
+def test_isolamento_por_tenant_nao_toca_em_jobs_reais(api_real, jobs_isolados):
+    _job_do_tenant(api_real, T1, DONO["user_id"])
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT current_schema(), count(*) FROM jobs")
+        schema, total = cur.fetchone()
+    assert schema == jobs_isolados and schema.startswith("itest_") and total == 1
+
+
+def _failed_com_geojson(api_real, tenant, owner_id, entrada=None):
+    """Job failed por entrada inválida, com o GeoJSON preservado (retenção de 30 dias), no schema itest_*.
+    `entrada` grava outro input_path (cruzado) em vez do GeoJSON do próprio job."""
+    job_id, task_id = uuid.uuid4().hex, str(uuid.uuid4())
+    if entrada is None:
+        entrada = api_real.saida / "inputs" / f"{job_id}-autointersecao.geojson"
+        entrada.write_text('{"type": "FeatureCollection", "features": []}')
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO jobs (id, task_id, status, input_filename, created_at, completed_at, input_path, owner_id,
+                                 tenant_id, erro)
+               VALUES (%s, %s, 'failed', 'autointersecao.geojson', %s, %s, %s, %s, %s, %s)""",
+            (job_id, task_id, AGORA - timedelta(hours=1), AGORA, str(entrada), owner_id, tenant,
+             "geometria_invalida: O polígono é inválido (ex.: autointerseção)."))
+    return task_id
+
+
+def test_geojson_de_job_failed_e_servido_ao_dono_e_404_para_outro_tenant(api_real):
+    task_id = _failed_com_geojson(api_real, T1, DONO["user_id"])
+    for user in (DONO, ADMIN_T1):
+        assert _chamar(api_real, user, task_id, "/input")[0] == 200, user["email"]
+        status, texto = _chamar(api_real, user, task_id, "")
+        publico = json.loads(texto)
+        assert (status, publico["status"], publico["arquivos"]) == (200, "failed", {})
+        assert publico["erro"] == "geometria_invalida: O polígono é inválido (ex.: autointerseção)."
+        assert "/" not in publico["erro"] and "Traceback" not in texto and str(api_real.saida) not in texto
+    for user in (COLEGA, MEMBRO_T2, ADMIN_T2):
+        assert _chamar(api_real, user, task_id, "/input")[0] == 404, user["email"]
+
+
+def _input_path(task_id):
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT input_path FROM jobs WHERE task_id = %s", (task_id,))
+        return cur.fetchone()[0]
+
+
+@pytest.mark.parametrize("vitima, atacante", [((T2, "u-alguem-t2"), DONO), ((T2, DONO["user_id"]), DONO),
+                                              ((T1, COLEGA["user_id"]), DONO)],
+                         ids=["outro-tenant", "mesmo-user-id-outro-tenant", "outro-dono-mesmo-tenant"])
+def test_input_path_cruzado_para_o_geojson_de_outro_job_da_404(api_real, vitima, atacante):
+    """O job do atacante é dele (passa no filtro do SQL), mas o input_path aponta para o GeoJSON de outro job."""
+    do_outro = _failed_com_geojson(api_real, *vitima)
+    alheio = _input_path(do_outro)
+    cruzado = _failed_com_geojson(api_real, atacante["tenant_id"], atacante["user_id"], entrada=alheio)
+    for user in (atacante, ADMIN_T1):
+        status, texto = _chamar(api_real, user, cruzado, "/input")
+        assert status == 404, user["email"]
+        assert str(api_real.saida) not in texto and "Traceback" not in texto
+    # O dono de verdade continua recebendo o próprio GeoJSON.
+    dono_real = {T1: ADMIN_T1, T2: ADMIN_T2}[vitima[0]]
+    assert _chamar(api_real, dono_real, do_outro, "/input")[0] == 200
