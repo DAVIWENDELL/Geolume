@@ -35,9 +35,12 @@ def _job(saida, job_id="j1", status="queued", task_id=None, criado_ha=timedelta(
 
 
 def _gerar(saida, job_id, *nomes):
+    """Artefatos válidos (passam em integridade.conferir_artefatos)."""
+    import artefatos
+
     (saida / job_id).mkdir(exist_ok=True)
-    for nome in nomes:
-        (saida / job_id / nome).write_bytes(b"ok")
+    if nomes:
+        artefatos.gravar(saida / job_id, job_id, *nomes)
 
 
 def _diag(job, saida, job_id="j1"):
@@ -72,14 +75,15 @@ def test_started_expirado_sem_artefatos_e_candidato(saida):
     assert (d["categoria"], d["motivo"]) == ("candidato_recuperacao", "execucao_expirada")
     assert (d["marco"], d["idade_segundos"]) == ("started_at", 7200)
     assert d["limite_segundos"] == LIMITE_EXECUCAO.total_seconds()
-    assert d["artefatos"] == {"estado": "ausentes", **{nome: False for nome in ARTEFATOS}}
+    assert d["artefatos"] == {"estado": "ausentes", **{nome: False for nome in ARTEFATOS},
+                              "motivos": {"pasta": "ausente"}}
 
 
 def test_started_expirado_com_os_tres_artefatos_e_revisao_manual(saida):
     _gerar(saida, "j1", *ARTEFATOS)
     d = _diag(_job(saida, status="started", task_id="t-1", iniciado_ha=timedelta(hours=2)), saida)
     assert (d["categoria"], d["motivo"]) == ("artefatos_presentes", "execucao_expirada")
-    assert d["artefatos"] == {"estado": "completos", **{nome: True for nome in ARTEFATOS}}
+    assert d["artefatos"] == {"estado": "completos", **{nome: True for nome in ARTEFATOS}, "motivos": {}}
 
 
 def test_started_expirado_com_artefatos_parciais_e_candidato(saida):
@@ -87,7 +91,34 @@ def test_started_expirado_com_artefatos_parciais_e_candidato(saida):
     d = _diag(_job(saida, status="started", task_id="t-1", iniciado_ha=timedelta(hours=2)), saida)
     assert d["categoria"] == "candidato_recuperacao"
     assert d["artefatos"] == {"estado": "parciais", "mapa.pdf": True, "memorial.pdf": False,
-                              "resultado.json": False}
+                              "resultado.json": False,
+                              "motivos": {"memorial.pdf": "ausente", "resultado.json": "ausente"}}
+
+
+@pytest.mark.parametrize("estrago, motivos", [
+    ("zerados", {"mapa.pdf": "sem_cabecalho_pdf", "memorial.pdf": "sem_cabecalho_pdf",
+                 "resultado.json": "json_invalido"}),
+    ("vazio", {"memorial.pdf": "vazio"}),
+    ("json_de_outro_job", {"resultado.json": "job_id_divergente"}),
+])
+def test_started_expirado_com_artefatos_invalidos_e_candidato_e_nao_revisao(saida, estrago, motivos):
+    import artefatos
+
+    _gerar(saida, "j1", *ARTEFATOS)
+    pasta = saida / "j1"
+    if estrago == "zerados":
+        for nome in ARTEFATOS:
+            (pasta / nome).write_bytes(b"\x00" * 1024)
+    elif estrago == "vazio":
+        (pasta / "memorial.pdf").write_bytes(b"")
+    else:
+        (pasta / "resultado.json").write_text(json.dumps(artefatos.resultado("outro")), encoding="utf-8")
+    antes = sorted((p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in pasta.iterdir())
+    d = _diag(_job(saida, status="started", task_id="t-1", iniciado_ha=timedelta(hours=2)), saida)
+    assert (d["categoria"], d["motivo"]) == ("candidato_recuperacao", "execucao_expirada")
+    assert d["artefatos"] == {"estado": "invalidos", **{nome: True for nome in ARTEFATOS}, "motivos": motivos}
+    assert sorted((p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in pasta.iterdir()) == antes
+    assert str(saida) not in json.dumps(d, default=str)
 
 
 def test_started_sem_started_at_nao_e_decidido(saida):

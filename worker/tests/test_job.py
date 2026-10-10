@@ -25,6 +25,61 @@ def test_run_job_gera_artefatos(qgis_app, fixtures_dir, tmp_path):
     assert result.peak_rss_mb > 0
 
 
+def test_artefatos_reais_do_qgis_passam_na_integridade(qgis_app, fixtures_dir, tmp_path):
+    import integridade
+
+    result = run_job(fixtures_dir / "lote_simples.geojson", tmp_path / "saida", job_id="real",
+                     prancha={"projeto": "Loteamento Sol", "legenda": "lateral"})
+    assert integridade.conferir_artefatos(tmp_path / "saida", "real") == {"ok": True, "motivos": {}}
+    assert sorted(p.name for p in result.pdf_path.parent.iterdir()) == ["mapa.pdf", "memorial.pdf", "resultado.json"]
+
+
+def test_copia_estragada_de_um_job_real_e_recusada_e_o_original_continua_valido(qgis_app, fixtures_dir, tmp_path):
+    """Destrutivo só na cópia: o caso real de 2026-10-01 (mesmo tamanho, só bytes zero)."""
+    import shutil
+
+    import integridade
+
+    run_job(fixtures_dir / "lote_simples.geojson", tmp_path / "saida", job_id="real")
+    copia = tmp_path / "copia"
+    shutil.copytree(tmp_path / "saida" / "real", copia / "real")
+    for nome in ("mapa.pdf", "memorial.pdf", "resultado.json"):
+        tamanho = (copia / "real" / nome).stat().st_size
+        (copia / "real" / nome).write_bytes(b"\x00" * tamanho)
+    assert integridade.conferir_artefatos(copia, "real") == {"ok": False, "motivos": {
+        "mapa.pdf": "sem_cabecalho_pdf", "memorial.pdf": "sem_cabecalho_pdf", "resultado.json": "json_invalido"}}
+    assert integridade.conferir_artefatos(tmp_path / "saida", "real")["ok"] is True
+
+
+def _poligono_metrico(tmp_path, nome, pontos_m):
+    """GeoJSON perto de Brasília com os vértices dados em metros relativos (aproximação local)."""
+    lon, lat = -47.9, -15.8
+    anel = [[lon + x / 107_000, lat + y / 111_000] for x, y in pontos_m]
+    entrada = tmp_path / "entradas" / f"{nome}.geojson"
+    entrada.parent.mkdir(exist_ok=True)
+    entrada.write_text(json.dumps({"type": "FeatureCollection", "features": [{
+        "type": "Feature", "properties": {},
+        "geometry": {"type": "Polygon", "coordinates": [anel + anel[:1]]}}]}), encoding="utf-8")
+    return entrada
+
+
+@pytest.mark.parametrize("nome, pontos_m, zeros", [
+    ("quadrado_0_4m", [(0, 0), (0.4, 0), (0.4, 0.4), (0, 0.4)], {"area_ha"}),
+    ("vertices_a_3mm", [(0, 0), (10, 0), (10.003, 0), (10, 10), (0, 10)], {"distancia_m"}),
+    ("quadrado_1mm", [(0, 0), (0.001, 0), (0.001, 0.001), (0, 0.001)], {"area_ha", "perimetro_m", "distancia_m"}),
+])
+def test_zeros_do_arredondamento_do_produtor_passam_na_integridade(qgis_app, tmp_path, nome, pontos_m, zeros):
+    """Entrada válida, valores arredondados a 0.0 pelo próprio run_job: o job tem de poder concluir."""
+    import integridade
+
+    run_job(_poligono_metrico(tmp_path, nome, pontos_m), tmp_path / "saida", job_id=nome)
+    dados = json.loads((tmp_path / "saida" / nome / "resultado.json").read_text(encoding="utf-8"))
+    vistos = {campo for campo in ("area_ha", "perimetro_m") if dados[campo] == 0.0}
+    vistos |= {"distancia_m"} if any(v["distancia_m"] == 0.0 for v in dados["vertices"]) else set()
+    assert vistos == zeros  # o caso exercita mesmo o zero que diz exercitar
+    assert integridade.conferir_artefatos(tmp_path / "saida", nome) == {"ok": True, "motivos": {}}
+
+
 def test_run_job_job_id_explicito(qgis_app, fixtures_dir, tmp_path):
     result = run_job(fixtures_dir / "lote_simples.geojson", tmp_path, job_id="abc")
     assert result.job_id == "abc"

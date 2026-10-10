@@ -50,10 +50,13 @@ def _uploads(saida):
 
 
 def _gerar(saida, *nomes):
+    """Artefatos válidos (passam em integridade.conferir_artefatos)."""
+    import artefatos
+
     pasta = saida / JOB
     pasta.mkdir(exist_ok=True)
-    for nome in nomes:
-        (pasta / nome).write_bytes(b"conteudo")
+    if nomes:
+        artefatos.gravar(pasta, JOB, *nomes)
     return pasta
 
 
@@ -91,6 +94,146 @@ def test_started_expirado_com_artefatos_parciais_vira_falha_sem_apagar_os_parcia
 
     assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "marcado_failed"
     assert sorted(p.name for p in pasta.iterdir()) == sorted(presentes)
+
+
+@pytest.mark.parametrize("estrago", ["zerados", "json_de_outro_job", "pdf_truncado", "link"])
+def test_tres_artefatos_invalidos_nao_contam_como_presentes(banco, saida, estrago):
+    """Corrompidos não seguram o job em revisão manual: valem como parciais (failed só pelo UPDATE condicional,
+    pedido à mão), e nenhum artefato é apagado nem o job é promovido."""
+    import json
+
+    import artefatos
+
+    banco["jobs"][JOB] = _started(saida)
+    pasta = _gerar(saida, *ARTEFATOS)
+    if estrago == "zerados":
+        for nome in ARTEFATOS:
+            (pasta / nome).write_bytes(b"\x00" * 1024)
+    elif estrago == "json_de_outro_job":
+        (pasta / "resultado.json").write_text(json.dumps(artefatos.resultado("outro")), encoding="utf-8")
+    elif estrago == "pdf_truncado":
+        (pasta / "memorial.pdf").write_bytes(artefatos.PDF[:-7])
+    else:
+        outro = artefatos.gravar(saida / "outro-lugar", JOB)
+        (pasta / "mapa.pdf").unlink()
+        (pasta / "mapa.pdf").symlink_to(outro / "mapa.pdf")
+    antes = sorted((p.name, p.lstat().st_size) for p in pasta.iterdir())
+
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "marcado_failed"
+
+    ((_, status, *_),) = banco["marcados"]
+    assert status == "started"  # só failed condicional; completed nunca
+    assert sorted((p.name, p.lstat().st_size) for p in pasta.iterdir()) == antes
+
+
+def _zerar(pasta):
+    for nome in ARTEFATOS:
+        (pasta / nome).write_bytes(b"\x00" * 1024)
+    return {nome: (pasta / nome).read_bytes() for nome in ARTEFATOS}
+
+
+def test_artefatos_invalidos_viram_failed_limpam_so_o_geojson_e_ficam_para_diagnostico(banco, saida):
+    """Decisão operacional: started expirado com os 3 artefatos presentes e inválidos vira failed (job_expirado)
+    pelo UPDATE condicional; sai só o GeoJSON do próprio job; a logo e os 3 artefatos ficam byte a byte para
+    diagnóstico; nada vira completed."""
+    banco["jobs"][JOB] = job = _started(saida)
+    entrada, logo = _uploads(saida)
+    vizinho = saida / "inputs" / f"{JOB}x-lote.geojson"  # prefixo parecido, outro job
+    vizinho.write_text("{}")
+    (saida / "logos" / f"{JOB}x.png").write_bytes(b"png")
+    conteudo = _zerar(_gerar(saida, *ARTEFATOS))
+
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "marcado_failed"
+
+    ((job_id, status, marco, expirado_antes, erro),) = banco["marcados"]
+    assert (job_id, status, marco, expirado_antes) == (JOB, "started", job["started_at"], AGORA - LIMITE_EXECUCAO)
+    assert erro == recuperacao.ERROS["execucao_expirada"]
+    assert not entrada.exists()
+    assert logo.read_bytes() == b"png"  # a logo fica com os artefatos
+    assert vizinho.exists() and (saida / "logos" / f"{JOB}x.png").exists()
+    assert {nome: (saida / JOB / nome).read_bytes() for nome in ARTEFATOS} == conteudo
+
+
+@pytest.mark.parametrize("estrago", ["json_de_outro_job", "pdf_truncado", "link"])
+def test_outros_artefatos_invalidos_tambem_mantem_a_logo(banco, saida, estrago):
+    import json
+
+    import artefatos
+
+    banco["jobs"][JOB] = _started(saida)
+    entrada, logo = _uploads(saida)
+    pasta = _gerar(saida, *ARTEFATOS)
+    if estrago == "json_de_outro_job":
+        (pasta / "resultado.json").write_text(json.dumps(artefatos.resultado("outro")), encoding="utf-8")
+    elif estrago == "pdf_truncado":
+        (pasta / "memorial.pdf").write_bytes(artefatos.PDF[:-7])
+    else:
+        outro = artefatos.gravar(saida / "outro-lugar", JOB)
+        (pasta / "mapa.pdf").unlink()
+        (pasta / "mapa.pdf").symlink_to(outro / "mapa.pdf")
+
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "marcado_failed"
+    assert not entrada.exists() and logo.exists()
+
+
+@pytest.mark.parametrize("presentes", [(), ("mapa.pdf",), ("mapa.pdf", "memorial.pdf")])
+def test_artefatos_ausentes_ou_parciais_continuam_limpando_geojson_e_logo(banco, saida, presentes):
+    """Fora do caso inválido nada muda: sem os 3 artefatos, saem o GeoJSON e a logo do job."""
+    banco["jobs"][JOB] = _started(saida)
+    entrada, logo = _uploads(saida)
+    _gerar(saida, *presentes)
+
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "marcado_failed"
+    assert not entrada.exists() and not logo.exists()
+
+
+def test_parcial_com_invalido_continua_parcial_e_limpa_a_logo(banco, saida):
+    banco["jobs"][JOB] = _started(saida)
+    entrada, logo = _uploads(saida)
+    pasta = _gerar(saida, "mapa.pdf", "memorial.pdf")
+    (pasta / "mapa.pdf").write_bytes(b"\x00" * 1024)  # 2 de 3, um deles zerado: parcial
+
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "marcado_failed"
+    assert not entrada.exists() and not logo.exists()
+
+
+def test_queued_sem_tarefa_continua_limpando_geojson_e_logo(banco, saida):
+    entrada = saida / "inputs" / f"{JOB}-lote.geojson"
+    entrada.write_text("{}")
+    banco["jobs"][JOB] = {"id": JOB, "status": "queued", "task_id": None, "created_at": AGORA - timedelta(hours=2),
+                          "started_at": None, "input_path": str(entrada)}
+    _, logo = _uploads(saida)
+
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "marcado_failed"
+    assert not entrada.exists() and not logo.exists()
+
+
+def test_artefatos_invalidos_com_corrida_perdida_nao_apagam_nada(banco, saida):
+    banco["jobs"][JOB] = _started(saida)
+    banco["ganha"] = False  # outro processo decidiu o job entre a leitura e o UPDATE
+    entrada, logo = _uploads(saida)
+    conteudo = _zerar(_gerar(saida, *ARTEFATOS))
+
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "outro_processo"
+
+    assert entrada.exists() and logo.exists()
+    assert {nome: (saida / JOB / nome).read_bytes() for nome in ARTEFATOS} == conteudo
+
+
+def test_recuperacao_nunca_promove_a_completed():
+    from pathlib import Path
+
+    fonte = Path(recuperacao.__file__).read_text(encoding="utf-8")
+    assert "concluir_job" not in fonte and "'completed'" not in fonte and '"completed"' not in fonte
+
+
+def test_recuperacao_usa_a_conferencia_de_integridade(banco, saida, monkeypatch):
+    banco["jobs"][JOB] = _started(saida)
+    vistos = []
+    monkeypatch.setattr(recuperacao, "conferir_artefatos",
+                        lambda saida_, job_id: vistos.append((saida_, job_id)) or {"ok": True, "motivos": {}})
+    assert recuperacao.recuperar_job_expirado(JOB, AGORA, saida) == "artefatos_presentes"
+    assert vistos == [(saida, JOB)] and banco["marcados"] == []
 
 
 def test_artefato_que_e_pasta_nao_conta_como_gerado(banco, saida):

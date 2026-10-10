@@ -282,3 +282,9 @@ def test_erro_de_coordenada_chega_ao_cliente_como_veio(api_module, erro):
 
 def test_erro_bruto_de_geometria_nula_nao_chega_ao_cliente(api_module):
     assert api_module._erro_publico("Null geometry cannot be converted to point.") == "Falha no processamento do job."
+
+
+def test_artefato_invalido_e_interno_e_o_cliente_ve_a_mensagem_generica(api_module):
+    erro = "artefato_invalido: mapa.pdf=sem_cabecalho_pdf, resultado.json=json_invalido"
+    assert "artefato_invalido" not in api_module.CODIGOS_DE_VALIDACAO
+    assert api_module._erro_publico(erro) == "Falha no processamento do job."

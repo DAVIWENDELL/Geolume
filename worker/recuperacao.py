@@ -12,11 +12,10 @@ from psycopg2.extras import RealDictCursor
 
 import db
 from geolume_worker.prancha import JOB_ID, caminho_logo
+from integridade import ARTEFATOS, conferir_artefatos
 from jobs_presos import LIMITE_EXECUCAO, LIMITE_SEM_TAREFA, motivo_job_preso
 
 logger = logging.getLogger(__name__)
-
-ARTEFATOS = ("mapa.pdf", "memorial.pdf", "resultado.json")
 # Não é código de validação: o cliente continua vendo a mensagem genérica de falha.
 ERROS = {
     "enfileiramento_perdido": "job_expirado: O job não chegou à fila de processamento.",
@@ -32,12 +31,20 @@ def ler_job(job_id: str) -> dict[str, object] | None:
     return dict(row) if row else None
 
 
-def _artefatos_completos(output_dir: Path, job_id: str) -> bool:
-    return all((Path(output_dir) / job_id / nome).is_file() for nome in ARTEFATOS)
+def _artefatos(output_dir: Path, job_id: str) -> str:
+    """"completos" só com os 3 íntegros; "invalidos" com os 3 presentes e algum reprovado; senão "parciais".
+
+    Mesma regra de `diagnostico_jobs`: zerado, truncado, de outro job ou link nunca conta como completo.
+    """
+    if conferir_artefatos(output_dir, job_id)["ok"]:
+        return "completos"
+    if all((Path(output_dir) / job_id / nome).is_file() for nome in ARTEFATOS):
+        return "invalidos"
+    return "parciais"
 
 
-def _limpar_uploads(job: dict, output_dir: Path) -> None:
-    """Só o GeoJSON `inputs/{job_id}-*` e a logo do próprio job; erro de disco não desfaz a falha."""
+def _limpar_uploads(job: dict, output_dir: Path, logo: bool = True) -> None:
+    """O GeoJSON `inputs/{job_id}-*` e, com `logo`, a logo do próprio job; erro de disco não desfaz a falha."""
     job_id = str(job["id"])
     alvos = []
     raw = job.get("input_path")
@@ -46,7 +53,7 @@ def _limpar_uploads(job: dict, output_dir: Path) -> None:
         inputs = (Path(output_dir) / "inputs").resolve()
         if entrada.parent.resolve() == inputs and entrada.name.startswith(f"{job_id}-"):
             alvos.append(entrada)
-    if JOB_ID.fullmatch(job_id):
+    if logo and JOB_ID.fullmatch(job_id):
         alvos.append(caminho_logo(output_dir, job_id))
     for alvo in alvos:
         try:
@@ -65,13 +72,16 @@ def recuperar_job_expirado(job_id: str, agora: datetime, output_dir: Path) -> st
     motivo = motivo_job_preso(job, agora)
     if motivo is None:
         return "nao_expirado"
+    estado = None
     if motivo == "execucao_expirada":
-        if _artefatos_completos(output_dir, job_id):
+        estado = _artefatos(output_dir, job_id)
+        if estado == "completos":
             return "artefatos_presentes"  # revisão manual: completed só com integridade confirmada
         marco, limite = job["started_at"], LIMITE_EXECUCAO
     else:
         marco, limite = job["created_at"], LIMITE_SEM_TAREFA
     if not db.marcar_job_expirado(job_id, job["status"], marco, agora - limite, ERROS[motivo]):
         return "outro_processo"
-    _limpar_uploads(job, output_dir)
+    # Artefatos inválidos ficam para diagnóstico junto com a logo que entrou no mapa; só o GeoJSON sai.
+    _limpar_uploads(job, output_dir, logo=estado != "invalidos")
     return "marcado_failed"

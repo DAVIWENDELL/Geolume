@@ -15,7 +15,7 @@ from psycopg2.extras import RealDictCursor
 import db
 from geolume_worker.prancha import JOB_ID, caminho_logo
 from jobs_presos import LIMITE_EXECUCAO, LIMITE_SEM_TAREFA, motivo_job_preso
-from recuperacao import ARTEFATOS
+from integridade import ARTEFATOS, conferir_artefatos
 
 CATEGORIAS = ("artefatos_presentes", "candidato_recuperacao", "nao_encontrado", "nao_expirado", "nao_recuperavel")
 # Só o necessário para decidir: sem owner_id, prancha, erro nem caminhos na saída.
@@ -57,10 +57,17 @@ def _geojson_do_job(job: dict, output_dir: Path) -> bool:
 
 
 def _artefatos(output_dir: Path, job_id: str) -> dict[str, object]:
+    """"completos" só com os 3 íntegros (integridade.py); os 3 presentes mas algum inválido é "invalidos"."""
     presentes = {nome: (Path(output_dir) / job_id / nome).is_file() for nome in ARTEFATOS}
+    conferencia = conferir_artefatos(output_dir, job_id)
     quantos = sum(presentes.values())
-    estado = "completos" if quantos == len(ARTEFATOS) else "parciais" if quantos else "ausentes"
-    return {"estado": estado, **presentes}
+    if conferencia["ok"]:
+        estado = "completos"
+    elif quantos == len(ARTEFATOS):
+        estado = "invalidos"
+    else:
+        estado = "parciais" if quantos else "ausentes"
+    return {"estado": estado, **presentes, "motivos": conferencia["motivos"]}
 
 
 def _classificar(job: dict, motivo: str | None, artefatos: dict) -> tuple[str, str]:

@@ -61,9 +61,12 @@ def _job(banco, saida, job_id="j1", status="queued", task_id=None, iniciado_ha=N
 
 
 def _gerar(saida, job_id, *nomes):
+    """Artefatos válidos (passam em integridade.conferir_artefatos)."""
+    import artefatos
+
     (saida / job_id).mkdir(exist_ok=True)
-    for nome in nomes:
-        (saida / job_id / nome).write_bytes(b"ok")
+    if nomes:
+        artefatos.gravar(saida / job_id, job_id, *nomes)
 
 
 def _rodar(capsys, saida, *args):
@@ -158,6 +161,21 @@ def test_started_expirado_com_os_tres_artefatos_nao_muda(banco, saida, capsys):
     codigo, r = _rodar(capsys, saida, *_aplicar("j1"))
     assert (codigo, r["resultado"]) == (1, "artefatos_presentes")
     assert banco["marcados"] == [] and _foto(saida) == antes and entrada.exists()
+
+
+def test_tres_artefatos_zerados_nao_seguram_o_job_e_nao_sao_apagados(banco, saida, capsys):
+    entrada = _job(banco, saida, status="started", task_id="t-1", iniciado_ha=timedelta(hours=2))
+    _gerar(saida, "j1", *ARTEFATOS)
+    for nome in ARTEFATOS:
+        (saida / "j1" / nome).write_bytes(b"\x00" * 1024)
+    codigo, r = _rodar(capsys, saida, "--job-id", "j1")  # sem --apply: só diagnóstico
+    (diag,) = r["diagnostico"]["jobs"]
+    assert codigo == 0 and diag["categoria"] == "candidato_recuperacao"
+    assert diag["artefatos"]["estado"] == "invalidos" and banco["marcados"] == []
+    codigo, r = _rodar(capsys, saida, *_aplicar("j1"))
+    assert (codigo, r["resultado"]) == (0, "marcado_failed")
+    assert all((saida / "j1" / nome).read_bytes() == b"\x00" * 1024 for nome in ARTEFATOS)
+    assert not entrada.exists() and (saida / "logos" / "j1.png").exists()  # só o GeoJSON sai
 
 
 @pytest.mark.parametrize("registro", [

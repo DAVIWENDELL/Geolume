@@ -11,6 +11,7 @@ from geolume_worker.job import run_job
 from geolume_worker.prancha import caminho_logo
 from geolume_worker.qgis_session import qgis_session
 from db import concluir_job, falhar_job, iniciar_job, init_db
+from integridade import conferir_artefatos
 
 BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/1")
 RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
@@ -61,7 +62,16 @@ def process_job(input_path: str, job_id: str, prancha: dict | None = None) -> di
             Path(input_path).unlink(missing_ok=True)
             caminho_logo(OUTPUT_DIR, job_id).unlink(missing_ok=True)
         raise
-    # Fora do try: banco fora aqui não marca failed nem apaga nada (fica started, com os 3 artefatos).
+    # Fora do try: banco fora daqui em diante não marca failed nem apaga nada (fica started, com os 3 artefatos).
+    integridade = conferir_artefatos(OUTPUT_DIR, job_id)
+    if not integridade["ok"]:
+        # Arquivo gerado mas ilegível (ex.: PDF zerado): nunca completed. Código interno, a API mostra a
+        # mensagem genérica. Artefatos e uploads ficam para diagnóstico.
+        motivos = ", ".join(f"{nome}={motivo}" for nome, motivo in sorted(integridade["motivos"].items()))
+        if not falhar_job(job_id, f"artefato_invalido: {motivos}"):
+            logger.warning("job %s com artefato inválido não estava em started; causa anterior mantida", job_id)
+        logger.warning("job %s com artefato inválido (%s); não concluído, artefatos mantidos", job_id, motivos)
+        return {"status": "artefato_invalido", "job_id": job_id}
     if not concluir_job(job_id, str(resultado.pdf_path), str(resultado.memorial_path), str(resultado.json_path)):
         # Outro processo já decidiu o job (ex.: a recuperação o marcou failed): o banco é o status oficial.
         logger.warning("job %s não estava em started; conclusão recusada e artefatos mantidos", job_id)
