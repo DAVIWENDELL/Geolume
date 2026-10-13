@@ -90,17 +90,29 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 /* ---- Composição: fluxo à esquerda, mapa e resultado à direita, histórico embaixo ---------- */
 .layout {
   display: grid; gap: 20px;
-  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
-  grid-template-areas: "fluxo trabalho" "historico historico";
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
   max-width: 1440px; margin: 0 auto;
   padding: 20px clamp(16px, 3vw, 32px) 48px;
+}
+/* As duas colunas ficam num contêiner próprio: a coluna fixa para nele e não cobre o histórico. */
+.area-trabalho {
+  display: grid; gap: 20px; min-width: 0;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  grid-template-areas: "fluxo trabalho";
+  align-items: start;
 }
 /* O fluxo permanece no fluxo normal para que o botão Processar continue alcançável
    quando a personalização aberta ultrapassa a altura da viewport. */
 .col-fluxo { grid-area: fluxo; display: grid; gap: var(--gap); min-width: 0; }
-.col-trabalho { grid-area: trabalho; display: grid; gap: var(--gap); min-width: 0; }
-.historico { grid-area: historico; min-width: 0; }
+/* Mapa e resultado ficam fixos enquanto o fluxo rola. A coluna nunca passa da altura da
+   tela: se for mais alta, rola por dentro e o resultado continua alcançável. */
+.col-trabalho {
+  grid-area: trabalho; display: grid; gap: var(--gap); min-width: 0;
+  position: sticky; top: 16px;
+  max-height: calc(100vh - 32px); overflow-y: auto;
+}
+.historico { min-width: 0; }
+.jobs-toggle { display: block; margin: 8px auto 0; }
 
 .panel {
   background: var(--superficie);
@@ -277,8 +289,9 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .prancha-swatch { display: inline-block; width: 22px; height: 14px; border: 2px solid; }
 
 /* Mapa e o seu lugar vazio: mesma moldura dupla e mesma altura, para a tela não pular. */
+/* No desktop o mapa divide a coluna fixa com o resultado: a altura sai da viewport. */
 .map, .map-vazio {
-  height: clamp(340px, 52vh, 580px);
+  height: clamp(300px, calc(100vh - 520px), 580px);
   border: 4px double var(--marrom); border-radius: 2px;
 }
 .map { background: var(--fundo); font: inherit; z-index: 0; }
@@ -458,7 +471,8 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
    arquivo → mapa → prancha → processar → resultado → histórico. */
 @media (max-width: 1023px) {
   .layout { display: flex; flex-direction: column; gap: var(--gap); }
-  .col-fluxo, .col-trabalho { display: contents; }
+  .area-trabalho, .col-fluxo, .col-trabalho { display: contents; }
+  .col-trabalho { position: static; max-height: none; overflow: visible; }
   .etapa-arquivo { order: 1; }
   .preview { order: 2; }
   .etapa-prancha { order: 3; }
@@ -489,10 +503,13 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .docs { grid-template-columns: minmax(0, 1fr); }
   .map-tools { flex-direction: column; align-items: stretch; }
   .map-polygon { flex-direction: column; align-items: stretch; }
+}
 
-  /* Histórico em cartões de duas linhas, sem repetir rótulos: arquivo e estado; data.
-     O cartão inteiro abre o job e os downloads ficam no Resultado: links na linha
-     tomavam o meio do cartão, e o toque para abrir virava download. */
+/* Histórico em cartões de duas linhas, sem repetir rótulos: arquivo e estado; data.
+   O cartão inteiro abre o job e os downloads ficam no Resultado. No celular, links na
+   linha tomavam o meio do cartão e o toque para abrir virava download; no desktop o
+   histórico fica na coluna estreita do fluxo, onde a tabela com links não cabe. */
+@media (max-width: 639px), (min-width: 1024px) {
   .jobs thead { display: none; }
   .jobs, .jobs tbody { display: block; width: 100%; }
   .jobs tr.job-row {

@@ -57,6 +57,16 @@ export function summarize(jobs) {
   return counts;
 }
 
+// Histórico resumido: os mais recentes à vista; "Ver mais" mostra a lista inteira já carregada.
+export const HISTORICO_RESUMIDO = 5;
+
+/** Uma flag por linha (na ordem dos jobs) e quantas ficam escondidas. O job selecionado nunca some. */
+export function historicoVisivel(jobs, { expandido, selectedTaskId } = {}) {
+  const mostrar = jobs.map((job, i) =>
+    Boolean(expandido) || i < HISTORICO_RESUMIDO || (selectedTaskId != null && job.task_id === selectedTaskId));
+  return { mostrar, escondidos: mostrar.filter((m) => !m).length };
+}
+
 export function validateUpload(file) {
   if (!file || !/\.geojson$/i.test(file.name ?? "")) {
     return { ok: false, message: "Selecione um arquivo .geojson" };

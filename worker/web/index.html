@@ -41,9 +41,10 @@
     </section>
   </main>
 
-  <!-- Desktop: fluxo à esquerda (arquivo → prancha → processar) e mapa + resultado à direita;
-       histórico embaixo. Mobile: uma coluna, com o mapa logo depois do arquivo (ver styles.css). -->
+  <!-- Desktop: fluxo à esquerda (arquivo → prancha → processar → histórico resumido) e mapa +
+       resultado à direita. Mobile: uma coluna, com o mapa logo depois do arquivo (ver styles.css). -->
   <main class="layout" data-testid="app" hidden>
+    <div class="area-trabalho">
     <div class="col-fluxo">
       <section class="panel etapa etapa-arquivo" aria-labelledby="upload-title">
         <h2 id="upload-title"><span class="etapa-num" aria-hidden="true">1</span>Escolha o arquivo GeoJSON</h2>
@@ -116,6 +117,39 @@
         <p class="upload-message" data-testid="upload-message" role="status" aria-live="polite"></p>
         <button class="btn btn-primary" data-testid="upload-submit" type="button" aria-describedby="envio-motivo" disabled>Processar</button>
         <p class="envio-motivo" data-testid="envio-motivo" id="envio-motivo">Escolha um arquivo GeoJSON válido para processar.</p>
+      </section>
+
+      <!-- Histórico resumido logo abaixo de "Confira e processe"; "Ver mais" mostra os 20 já carregados. -->
+      <section class="panel historico col-monitor" aria-labelledby="jobs-title">
+        <div class="panel-head">
+          <h2 id="jobs-title">Histórico <span class="hint">últimos 20</span></h2>
+          <button class="btn btn-secondary" data-testid="jobs-refresh" type="button">Atualizar</button>
+        </div>
+
+        <ul class="summary" data-testid="summary" aria-label="Contagem por estado">
+          <li data-status="queued"><span class="count" data-count>0</span> na fila</li>
+          <li data-status="started"><span class="count" data-count>0</span> em execução</li>
+          <li data-status="completed"><span class="count" data-count>0</span> concluídos</li>
+          <li data-status="failed"><span class="count" data-count>0</span> com falha</li>
+        </ul>
+
+        <div class="jobs-error" data-testid="jobs-error" role="alert" hidden>
+          <span data-jobs-error-text></span>
+          <button class="btn btn-secondary" type="button" data-jobs-retry>Tentar novamente</button>
+        </div>
+
+        <table class="jobs" id="jobs-table" data-testid="jobs-table">
+          <caption class="visually-hidden">Processamentos recentes. Selecione uma linha para abrir o processamento.</caption>
+          <thead>
+            <tr><th scope="col">Arquivo</th><th scope="col">Estado</th><th scope="col">Criado em</th><th scope="col">Documentos</th></tr>
+          </thead>
+          <tbody data-jobs-body>
+            <tr class="jobs-placeholder" data-jobs-loading><td colspan="4">Carregando…</td></tr>
+          </tbody>
+        </table>
+        <button class="btn btn-quiet jobs-toggle" data-testid="jobs-toggle" type="button"
+          aria-expanded="false" aria-controls="jobs-table" hidden>Ver mais</button>
+        <p class="empty" data-testid="jobs-empty" hidden>Nenhum processamento ainda. Escolha o primeiro GeoJSON acima.</p>
       </section>
     </div>
 
@@ -218,36 +252,7 @@
         </div>
       </section>
     </div>
-
-    <section class="panel historico col-monitor" aria-labelledby="jobs-title">
-      <div class="panel-head">
-        <h2 id="jobs-title">Histórico <span class="hint">últimos 20</span></h2>
-        <button class="btn btn-secondary" data-testid="jobs-refresh" type="button">Atualizar</button>
-      </div>
-
-      <ul class="summary" data-testid="summary" aria-label="Contagem por estado">
-        <li data-status="queued"><span class="count" data-count>0</span> na fila</li>
-        <li data-status="started"><span class="count" data-count>0</span> em execução</li>
-        <li data-status="completed"><span class="count" data-count>0</span> concluídos</li>
-        <li data-status="failed"><span class="count" data-count>0</span> com falha</li>
-      </ul>
-
-      <div class="jobs-error" data-testid="jobs-error" role="alert" hidden>
-        <span data-jobs-error-text></span>
-        <button class="btn btn-secondary" type="button" data-jobs-retry>Tentar novamente</button>
-      </div>
-
-      <table class="jobs" data-testid="jobs-table">
-        <caption class="visually-hidden">Processamentos recentes. Selecione uma linha para abrir o processamento.</caption>
-        <thead>
-          <tr><th scope="col">Arquivo</th><th scope="col">Estado</th><th scope="col">Criado em</th><th scope="col">Documentos</th></tr>
-        </thead>
-        <tbody data-jobs-body>
-          <tr class="jobs-placeholder" data-jobs-loading><td colspan="4">Carregando…</td></tr>
-        </tbody>
-      </table>
-      <p class="empty" data-testid="jobs-empty" hidden>Nenhum processamento ainda. Escolha o primeiro GeoJSON acima.</p>
-    </section>
+    </div>
   </main>
 </body>
 </html>

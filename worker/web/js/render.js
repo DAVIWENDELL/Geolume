@@ -1,7 +1,7 @@
 // Renderização: dados da API entram no DOM só por textContent e atributos.
 import { formatMetrics } from "./geo.js";
 import { camadaAtivavel, grupos, legendItems } from "./layers.js";
-import { fileLinks, formatBytes, isTerminal, mensagemErro, normalizeStatus, statusLabel } from "./model.js";
+import { HISTORICO_RESUMIDO, fileLinks, formatBytes, isTerminal, mensagemErro, normalizeStatus, statusLabel } from "./model.js";
 import { pranchaTitle, responsavelLine } from "./prancha.js";
 
 const STEPS = ["queued", "started", "end"];
@@ -412,6 +412,15 @@ export function renderJobs(tbody, jobs, selectedTaskId, onSelect) {
     const again = [...tbody.children].find((row) => row.dataset.taskId === focusedId);
     again?.focus();
   }
+}
+
+/** Esconde as linhas fora do histórico resumido e ajusta o botão Ver mais/Ver menos. */
+export function renderHistoricoVisivel(tbody, toggle, { mostrar, escondidos }, expandido) {
+  const rows = [...tbody.children].filter((row) => row.dataset.taskId !== undefined);
+  rows.forEach((row, i) => { row.hidden = mostrar[i] === false; });
+  toggle.hidden = expandido ? rows.length <= HISTORICO_RESUMIDO : escondidos === 0;
+  toggle.setAttribute("aria-expanded", String(Boolean(expandido)));
+  toggle.textContent = expandido ? "Ver menos" : `Ver mais (${escondidos})`;
 }
 
 export function markSelectedRow(tbody, selectedTaskId) {

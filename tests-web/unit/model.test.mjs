@@ -12,7 +12,43 @@ import {
   etapaArquivo,
   motivoProcessar,
   mensagemErro,
+  historicoVisivel,
+  HISTORICO_RESUMIDO,
 } from "../../worker/web/js/model.js";
+
+const jobsN = (n) => Array.from({ length: n }, (_, i) => ({ task_id: `t${i}` }));
+
+const contar = (mostrar) => mostrar.filter(Boolean).length;
+
+test("historicoVisivel: resumido mostra os 5 mais recentes e quantos ficam escondidos", () => {
+  assert.equal(HISTORICO_RESUMIDO, 5);
+  const r = historicoVisivel(jobsN(20), { expandido: false });
+  assert.deepEqual(r.mostrar.slice(0, 6), [true, true, true, true, true, false]);
+  assert.equal(contar(r.mostrar), 5);
+  assert.equal(r.escondidos, 15);
+});
+
+test("historicoVisivel: expandido mostra todos; poucos jobs não escondem nada", () => {
+  const todos = historicoVisivel(jobsN(20), { expandido: true });
+  assert.equal(contar(todos.mostrar), 20);
+  assert.equal(todos.escondidos, 0);
+  const poucos = historicoVisivel(jobsN(3), { expandido: false });
+  assert.equal(contar(poucos.mostrar), 3);
+  assert.equal(poucos.escondidos, 0);
+  assert.deepEqual(historicoVisivel([], { expandido: false }), { mostrar: [], escondidos: 0 });
+});
+
+test("historicoVisivel: o job selecionado fora dos 5 continua visível", () => {
+  const r = historicoVisivel(jobsN(20), { expandido: false, selectedTaskId: "t12" });
+  assert.equal(r.mostrar[12], true);
+  assert.equal(contar(r.mostrar), 6);
+  assert.equal(r.escondidos, 14);
+});
+
+test("historicoVisivel: job sem task_id não é tratado como selecionado quando nada está selecionado", () => {
+  const jobs = [...jobsN(5), { task_id: null }];
+  assert.equal(historicoVisivel(jobs, { expandido: false, selectedTaskId: null }).mostrar[5], false);
+});
 
 test("normalizeStatus mapeia estados da fila", () => {
   for (const raw of ["queued", "pending", "received", "retry", "PENDING"]) {

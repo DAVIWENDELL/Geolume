@@ -242,13 +242,75 @@ for (const [width, height] of [[1440, 900], [768, 1024], [375, 812]]) {
       expect(box.x + box.width).toBeLessThanOrEqual(width);
     }
 
-    const detail = await page.getByTestId("detail").boundingBox();
+    // Desktop: histórico na coluna do fluxo, abaixo de "Confira e processe".
+    // Tablet e celular: uma coluna só, com o histórico depois do resultado.
+    const acima = await page.locator(width >= 1024 ? ".etapa-envio" : '[data-testid="detail"]').boundingBox();
     const table = await page.getByTestId("jobs-table").boundingBox();
-    // O redesign aprovado deixa o histórico compacto abaixo da área de trabalho
-    // também no desktop; ele não ocupa mais uma terceira coluna lateral.
-    expect(table.y).toBeGreaterThan(detail.y + detail.height - 1);
+    expect(table.y).toBeGreaterThan(acima.y + acima.height - 1);
   });
 }
+
+// ---- Desktop: pré-visualização e resultado fixos enquanto o fluxo rola -----------------------
+
+test("desktop: mapa continua na tela ao rolar até Processar com a prancha aberta", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByTestId("prancha-form").locator("summary").click();
+  await page.getByTestId("upload-input").setInputFiles(fixture("gleba_rural_exemplo.geojson"));
+  await expect(page.getByTestId("preview-map")).toBeVisible();
+
+  await page.getByTestId("upload-submit").scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => window.scrollY), "o fluxo precisa rolar para o teste valer").toBeGreaterThan(0);
+  await expect(page.getByTestId("upload-submit")).toBeInViewport();
+  await expect(page.getByTestId("preview-map")).toBeInViewport();
+
+  // A coluna fixa nunca passa da altura da tela: o resultado continua alcançável.
+  const col = page.locator(".col-trabalho");
+  expect(await col.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThanOrEqual(900);
+  await page.getByTestId("detail").scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("detail")).toBeInViewport();
+
+  // A coluna fixa tem só pré-visualização e resultado; o histórico fica no fluxo.
+  await expect(col.locator(".historico")).toHaveCount(0);
+  await expect(page.locator(".col-fluxo .historico")).toHaveCount(1);
+});
+
+test("histórico resumido abaixo de Confira e processe: 5 cartões e Ver mais/Ver menos", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const linhas = page.getByTestId("jobs-row");
+  await expect(linhas.first()).toBeVisible();
+  const total = await linhas.count();
+  expect(total, "o usuário de teste já tem mais de 5 jobs").toBeGreaterThan(5);
+
+  const envio = await page.locator(".etapa-envio").boundingBox();
+  const tabela = await page.getByTestId("jobs-table").boundingBox();
+  expect(tabela.y).toBeGreaterThan(envio.y + envio.height - 1);
+  expect(Math.abs(tabela.x - envio.x)).toBeLessThan(40); // mesma coluna do Processar
+  expect(tabela.x + tabela.width).toBeLessThanOrEqual(envio.x + envio.width); // cabe na coluna, sem rolagem
+  // Coluna estreita: cartões sem links; os downloads ficam no Resultado.
+  await expect(linhas.first().locator(".row-links")).toBeHidden();
+
+  const toggle = page.getByTestId("jobs-toggle");
+  await expect(page.locator('[data-testid="jobs-row"]:visible')).toHaveCount(5);
+  await expect(toggle).toHaveText(`Ver mais (${total - 5})`);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  await toggle.click();
+  await expect(page.locator('[data-testid="jobs-row"]:visible')).toHaveCount(total);
+  await expect(toggle).toHaveText("Ver menos");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+  await toggle.click();
+  await expect(page.locator('[data-testid="jobs-row"]:visible')).toHaveCount(5);
+});
+
+test("tablet: sem coluna fixa, o mapa segue na ordem do fluxo", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await page.goto("/");
+  await expect(page.getByTestId("preview")).toBeVisible();
+  expect(await page.getByTestId("preview").evaluate((el) => getComputedStyle(el).position)).toBe("static");
+});
 
 // ---- Varredura de UX: alvos de toque de 44 px no celular e no tablet ----------------------
 

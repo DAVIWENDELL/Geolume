@@ -3,7 +3,7 @@ import { createApi } from "./api.js";
 import { parseGeoJsonPreview, parseMetrics } from "./geo.js";
 import { CATALOGO_VAZIO, parseCatalogo } from "./layers.js";
 import { createMapView } from "./map.js";
-import { etapaArquivo, isCurrent, mensagemErro, motivoProcessar, isTerminal, normalizeStatus, summarize, validateUpload } from "./model.js";
+import { etapaArquivo, historicoVisivel, isCurrent, mensagemErro, motivoProcessar, isTerminal, normalizeStatus, summarize, validateUpload } from "./model.js";
 import { createPoller } from "./poller.js";
 import {
   LAYOUTS,
@@ -24,6 +24,7 @@ import {
   renderDetail,
   renderEstiloCards,
   renderHealth,
+  renderHistoricoVisivel,
   renderJobs,
   renderLayoutCards,
   renderMapTools,
@@ -62,6 +63,7 @@ const ui = {
   jobsErrorText: document.querySelector("[data-jobs-error-text]"),
   jobsRetry: document.querySelector("[data-jobs-retry]"),
   refresh: $("jobs-refresh"),
+  jobsToggle: $("jobs-toggle"),
   preview: $("preview"),
   app: $("app"),
   login: $("login"),
@@ -127,6 +129,8 @@ const state = {
   warning: null, // falha da última consulta do job selecionado
   jobPoller: null,
   jobsKey: null,
+  jobs: [], // última lista do histórico, na ordem das linhas
+  historicoExpandido: false, // "Ver mais" aberto
   preview: null, // { file, result } do arquivo selecionado, depois de lido
   previewGen: 0, // descarta leituras superadas por outro arquivo
   shapes: new Map(), // task_id -> { name, geometry, bounds } (envios desta sessão ou GET /input)
@@ -185,6 +189,8 @@ async function refreshJobs({ isStale }) {
     if (key !== state.jobsKey) {
       state.jobsKey = key;
       renderJobs(ui.jobsBody, jobs, state.selectedTaskId, (job) => selectJob(job));
+      state.jobs = jobs;
+      showHistorico();
     }
   } catch (err) {
     if (isStale()) return false;
@@ -194,6 +200,11 @@ async function refreshJobs({ isStale }) {
     throw err;
   }
   return true;
+}
+
+function showHistorico() {
+  const visivel = historicoVisivel(state.jobs, { expandido: state.historicoExpandido, selectedTaskId: state.selectedTaskId });
+  renderHistoricoVisivel(ui.jobsBody, ui.jobsToggle, visivel, state.historicoExpandido);
 }
 
 const listPoller = createPoller({ task: refreshJobs, interval: LIST_INTERVAL, maxInterval: MAX_INTERVAL });
@@ -251,6 +262,7 @@ function selectJob(raw) {
   state.job = toJob(raw);
   renderDetail(ui.detail, state.job);
   markSelectedRow(ui.jobsBody, state.selectedTaskId);
+  showHistorico();
   showPreview();
   loadInput(raw.task_id, state.job.input_filename);
   if (state.job.status === "completed") loadMetrics(raw.task_id);
@@ -603,6 +615,9 @@ function signOut(message = "", kind = "error") {
   state.job = null;
   state.warning = null;
   state.jobsKey = null;
+  state.jobs = [];
+  state.historicoExpandido = false;
+  ui.jobsToggle.hidden = true;
   state.sending = false;
   state.shapes.clear();
   state.inputs.clear();
@@ -668,6 +683,10 @@ ui.logout.addEventListener("click", async () => {
 
 ui.refresh.addEventListener("click", reloadJobs);
 ui.jobsRetry.addEventListener("click", reloadJobs);
+ui.jobsToggle.addEventListener("click", () => {
+  state.historicoExpandido = !state.historicoExpandido;
+  showHistorico();
+});
 
 document.addEventListener("visibilitychange", () => {
   const pollers = [healthPoller, state.user && listPoller, state.jobPoller].filter(Boolean);

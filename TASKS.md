@@ -16,6 +16,8 @@ Legenda: `[ ]` pendente · `[x]` verificado no repositório · `[?]` precisa de 
 - [x] Tela principal reorganizada para o fluxo de cliente: arquivo e configuração à esquerda, mapa e resultado à direita, histórico compacto abaixo; desktop e mobile verificados pelo Playwright.
 - [x] Botão Processar mantido alcançável com a prancha aberta, removendo o sticky da coluna de fluxo e cobrindo o comportamento com E2E.
 - [x] Varredura final de UX da tela principal (2026-10-01): amostra da legenda segue o estilo do polígono, alvos de 44 px em tablet e celular, histórico mobile sem links no cartão e falha sem código interno; cobertos por unitário e E2E.
+- [x] Pré-visualização e resultado fixos (sticky) no desktop enquanto o fluxo rola; tablet e celular sem mudança; coberto por E2E (2026-10-12, branch `feature/frontend-design-miller`, aguardando revisão).
+- [x] Histórico movido para a coluna do fluxo, abaixo de "Confira e processe", em cartões, resumido em 5 itens com "Ver mais"/"Ver menos", sem mudar a API; unitário e E2E (2026-10-12, mesma branch, aguardando revisão).
 - [x] Testes unitários, worker, API e Playwright versionados.
 - [x] Proteções de autenticação, autorização, CSRF, limites e arquivos.
 

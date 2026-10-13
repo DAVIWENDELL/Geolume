@@ -20,7 +20,10 @@
 ## Composição da operação
 
 - A tela principal segue o fluxo visual `arquivo → validação → pré-visualização → prancha opcional → processamento → resultado → histórico`.
-- Em desktop, o fluxo de configuração fica à esquerda e a pré-visualização, o resultado e os documentos ficam à direita; o histórico fica compacto abaixo da área de trabalho.
+- Em desktop, a coluna da esquerda tem o fluxo (arquivo, prancha, Confira e processe) e, abaixo dele, o histórico resumido; a pré-visualização e o resultado ficam à direita.
+- No desktop o histórico usa os mesmos cartões do celular (arquivo e estado; data), sem a coluna Documentos: a coluna do fluxo é estreita demais para a tabela com links. O cartão abre o job e os downloads ficam no Resultado. Entre 640 e 1023 px a tabela com links continua.
+- Em desktop (≥ 1024 px), a coluna da direita (pré-visualização + resultado) é `position: sticky`: fica na tela enquanto o fluxo da esquerda rola. Ela nunca passa da altura da viewport — se o conteúdo for maior, rola por dentro — e a altura do mapa sai da viewport para mapa e resultado caberem juntos. Abaixo de 1024 px nada fica fixo.
+- O histórico é resumido: mostra os 5 processamentos mais recentes (mais o selecionado, se estiver fora deles) e o botão "Ver mais (N)" / "Ver menos" (`data-testid="jobs-toggle"`, com `aria-expanded`) mostra os 20 que a API já entrega. É só apresentação: a consulta continua `GET /jobs?limit=20`.
 - Em telas menores, a ordem passa a ser arquivo, mapa, prancha recolhida, processamento, resultado e histórico.
 - A personalização da prancha permanece em `<details>` para não dominar o estado vazio.
 - O botão de processamento permanece no fluxo normal da página, sem `position: sticky`, para continuar alcançável quando a prancha estiver aberta e for mais alta que a viewport.

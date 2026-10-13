@@ -36,6 +36,13 @@ async function abrir(page) {
   await expect(page.getByTestId("app")).toBeVisible();
 }
 
+/** O histórico mostra só os mais recentes; jobs antigos aparecem depois de "Ver mais". */
+async function verHistoricoCompleto(page) {
+  await expect(page.getByTestId("jobs-row").first()).toBeVisible();
+  const toggle = page.getByTestId("jobs-toggle");
+  if ((await toggle.isVisible()) && (await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+}
+
 async function personalizar(page) {
   const form = page.getByTestId("prancha-form");
   if (!(await form.evaluate((el) => el.open))) await form.locator("summary").click();
@@ -187,6 +194,7 @@ test("histórico: job sem prancha usa o padrão; job personalizado usa a prancha
   await expect(polygon(page)).toHaveAttribute("fill", "#00FF00");
   await expect(page.getByTestId("prancha-logo")).toBeHidden();
 
+  await verHistoricoCompleto(page);
   await row(page, antigo).click();
   await expect(page.getByTestId("prancha-title")).toHaveText(TITULO_PADRAO);
   await expect(polygon(page)).toHaveAttribute("stroke", "#C80000");
@@ -419,6 +427,7 @@ test("histórico mostra o layout do job; job antigo fica no Padrão", async ({ p
   await expect(polygon(page)).toHaveCount(1);
   await expect(miniatura(page)).toHaveAttribute("data-layout", "inferior");
   await expect(page.getByTestId("prancha-legenda")).toHaveAttribute("data-posicao", "inferior");
+  await verHistoricoCompleto(page);
   await row(page, antigo).click();
   await expect(miniatura(page)).toHaveAttribute("data-layout", "nenhuma");
   await expect(page.getByTestId("prancha-legenda")).toBeHidden();
@@ -610,6 +619,7 @@ test("job antigo sem prancha abre com estilo padrão e fill-opacity 89/255; job 
   await concluido(a, comEstilo);
 
   await abrir(page);
+  await verHistoricoCompleto(page);
   await row(page, antigo).click();
   await expect(polygon(page)).toHaveCount(1);
   await expect(polygon(page)).toHaveAttribute("stroke-width", "3");
