@@ -681,6 +681,18 @@ ui.logout.addEventListener("click", async () => {
 
 // ---- Ciclo de vida ------------------------------------------------------
 
+// Alturas para o CSS: a barra fixa do topo (que quebra em duas linhas no celular) e a coluna do
+// mapa e resultado, que fixa no topo ou no fim dela conforme cabe na tela.
+const colTrabalho = document.querySelector(".col-trabalho");
+const topbar = document.querySelector(".topbar");
+if ("ResizeObserver" in window) {
+  const altura = (el, prop, alvo) => new ResizeObserver(() => {
+    alvo.style.setProperty(prop, `${Math.ceil(el.getBoundingClientRect().height)}px`);
+  }).observe(el);
+  if (topbar) altura(topbar, "--topbar-altura", document.documentElement);
+  if (colTrabalho) altura(colTrabalho, "--col-trabalho-altura", colTrabalho);
+}
+
 ui.refresh.addEventListener("click", reloadJobs);
 ui.jobsRetry.addEventListener("click", reloadJobs);
 ui.jobsToggle.addEventListener("click", () => {

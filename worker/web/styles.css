@@ -50,8 +50,14 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
 [hidden] { display: none !important; }
 
+/* Rolagem por teclado e âncoras para abaixo da barra fixa (o foco não fica escondido nela).
+   --topbar-altura vem do app.js (ResizeObserver); a barra quebra em duas linhas no celular. */
+html { scroll-padding-top: calc(var(--topbar-altura, 64px) + 8px); }
+
 /* ---- Cabeçalho compacto: marca, estado da API, usuário e Sair ---------------------------- */
+/* Fixo no topo ao rolar; acima dos controles do Leaflet (z-index 1000 dentro do mapa). */
 .topbar {
+  position: sticky; top: 0; z-index: 1001;
   display: flex; align-items: center; gap: 16px;
   padding: 8px clamp(16px, 3vw, 32px);
   background: var(--superficie);
@@ -104,12 +110,15 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 /* O fluxo permanece no fluxo normal para que o botão Processar continue alcançável
    quando a personalização aberta ultrapassa a altura da viewport. */
 .col-fluxo { grid-area: fluxo; display: grid; gap: var(--gap); min-width: 0; }
-/* Mapa e resultado ficam fixos enquanto o fluxo rola. A coluna nunca passa da altura da
-   tela: se for mais alta, rola por dentro e o resultado continua alcançável. */
+/* Mapa e resultado acompanham o fluxo. Se a coluna cabe na tela, fica fixa no topo; se é
+   mais alta (notebook com resultado aberto), rola com a página até o fim dela — os
+   documentos — aparecer e fixa ali. Sem rolagem interna: nada fica escondido.
+   --col-trabalho-altura vem do app.js (ResizeObserver); sem ela, fixa no topo.
+   O topo conta a barra fixa do cabeçalho. */
 .col-trabalho {
   grid-area: trabalho; display: grid; gap: var(--gap); min-width: 0;
-  position: sticky; top: 16px;
-  max-height: calc(100vh - 32px); overflow-y: auto;
+  position: sticky;
+  top: min(calc(var(--topbar-altura, 64px) + 16px), calc(100vh - var(--col-trabalho-altura, 0px) - 16px));
 }
 .historico { min-width: 0; }
 .jobs-toggle { display: block; margin: 8px auto 0; }
@@ -472,7 +481,7 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 @media (max-width: 1023px) {
   .layout { display: flex; flex-direction: column; gap: var(--gap); }
   .area-trabalho, .col-fluxo, .col-trabalho { display: contents; }
-  .col-trabalho { position: static; max-height: none; overflow: visible; }
+  .col-trabalho { position: static; }
   .etapa-arquivo { order: 1; }
   .preview { order: 2; }
   .etapa-prancha { order: 3; }
@@ -484,6 +493,7 @@ code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .btn, .btn-quiet { min-height: 44px; }
   .camadas-mais summary, .detalhes-tecnicos summary { min-height: 44px; }
   .row-links a { display: inline-flex; align-items: center; min-height: 44px; }
+  .map .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 22px; }
 }
 
 /* ---- < 640 px: celular ---------------------------------------------------------------------- */

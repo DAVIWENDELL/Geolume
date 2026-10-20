@@ -264,16 +264,86 @@ test("desktop: mapa continua na tela ao rolar até Processar com a prancha abert
   await expect(page.getByTestId("upload-submit")).toBeInViewport();
   await expect(page.getByTestId("preview-map")).toBeInViewport();
 
-  // A coluna fixa nunca passa da altura da tela: o resultado continua alcançável.
+  // A coluna fixa cabe na tela: inteira à vista, sem rolagem interna.
   const col = page.locator(".col-trabalho");
-  expect(await col.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThanOrEqual(900);
-  await page.getByTestId("detail").scrollIntoViewIfNeeded();
-  await expect(page.getByTestId("detail")).toBeInViewport();
+  expect(await col.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+  await expect(page.getByTestId("detail")).toBeInViewport({ ratio: 1 });
 
   // A coluna fixa tem só pré-visualização e resultado; o histórico fica no fluxo.
   await expect(col.locator(".historico")).toHaveCount(0);
   await expect(page.locator(".col-fluxo .historico")).toHaveCount(1);
 });
+
+for (const [width, height] of [[1440, 900], [1366, 768], [768, 1024], [390, 844], [320, 640]]) {
+  test(`barra do topo fixa ao rolar ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await expect(page.getByTestId("jobs-row").first()).toBeVisible();
+    await page.getByTestId("prancha-form").locator("summary").click();
+    await page.getByTestId("upload-input").setInputFiles(fixture("gleba_rural_exemplo.geojson"));
+    await expect(page.getByTestId("preview-map")).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    const barra = await page.locator(".topbar").boundingBox();
+    expect(Math.abs(barra.y)).toBeLessThanOrEqual(1);
+    await expect(page.getByTestId("logout")).toBeInViewport({ ratio: 1 });
+
+    // O que passa por baixo da barra fica atrás dela, inclusive os controles do mapa.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByTestId("preview-map").evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 20));
+    const meio = { x: Math.round(barra.x + barra.width / 2), y: Math.round(barra.y + barra.height / 2) };
+    expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest(".topbar"), meio)).toBe(true);
+
+    if (width >= 1024) {
+      // Coluna que cabe abaixo da barra gruda logo abaixo dela; a mais alta gruda pelo fim,
+      // com os documentos inteiros à vista.
+      await page.getByTestId("upload-submit").scrollIntoViewIfNeeded();
+      const col = await page.locator(".col-trabalho").boundingBox();
+      if (col.height <= height - barra.height - 32) expect(col.y + 1).toBeGreaterThanOrEqual(barra.y + barra.height);
+      else expect(col.y + col.height).toBeLessThanOrEqual(height);
+    }
+  });
+}
+
+test("Tab até um campo abaixo da barra não deixa o foco escondido", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto("/");
+  await page.getByTestId("prancha-form").locator("summary").click();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.getByTestId("prancha-input-projeto").focus();
+  await page.keyboard.press("Tab"); // o navegador rola para mostrar o próximo campo
+  const barra = await page.locator(".topbar").boundingBox();
+  const foco = await page.evaluate(() => document.activeElement.getBoundingClientRect().top);
+  expect(foco).toBeGreaterThanOrEqual(barra.y + barra.height - 1);
+});
+
+for (const [width, height] of [[1024, 768], [1280, 720], [1366, 768], [1536, 864]]) {
+  test(`notebook ${width}x${height}: coluna mais alta que a tela não corta o resultado`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await page.getByTestId("jobs-row").first().click();
+    await expect(page.getByTestId("detail-links").locator("a")).toHaveCount(3);
+    await page.getByTestId("prancha-form").locator("summary").click();
+    await page.getByTestId("upload-input").setInputFiles(fixture("gleba_rural_exemplo.geojson"));
+    await expect(page.getByTestId("preview-map")).toBeVisible();
+
+    const col = page.locator(".col-trabalho");
+    expect(await col.evaluate((el) => el.scrollHeight), "cenário: coluna maior que a tela").toBeGreaterThan(height);
+    // Nada fica escondido atrás de rolagem interna.
+    expect(await col.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+
+    // Rolando até Processar, os documentos do resultado aparecem inteiros e o mapa continua à vista.
+    await page.getByTestId("upload-submit").scrollIntoViewIfNeeded();
+    await expect(page.getByTestId("upload-submit")).toBeInViewport();
+    for (let i = 0; i < 3; i++) await expect(page.getByTestId("detail-links").locator(".doc").nth(i)).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId("preview-map")).toBeInViewport();
+
+    // No topo da página o mapa aparece.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page.getByTestId("preview-map")).toBeInViewport({ ratio: 0.5 });
+  });
+}
 
 test("histórico resumido abaixo de Confira e processe: 5 cartões e Ver mais/Ver menos", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -330,6 +400,8 @@ for (const [width, height] of [[768, 1024], [390, 844], [320, 640]]) {
       outrasCamadas: page.getByTestId("camadas-mais").locator("summary"),
       detalhesTecnicos: page.locator(".detalhes-tecnicos summary"),
       copiar: page.locator("[data-copy]").first(),
+      zoomMais: page.locator(".leaflet-control-zoom-in"),
+      zoomMenos: page.locator(".leaflet-control-zoom-out"),
     };
     // Tablet: tabela com a coluna Documentos. Celular: o cartão inteiro abre o job, sem links no meio dele.
     const linha = page.locator(`[data-testid="jobs-row"][data-task-id="${completedTaskId}"]`);
